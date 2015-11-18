@@ -1,0 +1,7 @@
+This is an implementation of the Smith-Waterman string
+alignment algorithm in the C programming language.
+
+The algorithm is design in the context of DNA nucleotide
+sequence alignment. The scoring incorporate into the
+aligner will be conscious of thermodynamics aspect
+of the nucleotide string.
