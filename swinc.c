@@ -74,13 +74,7 @@ int main(int argc, char **argv){
     char *query = argv[2];
     int ref_len = strlen(ref);
     int query_len = strlen(query);
-    printf("%s\n%s\n%i %i\n", ref, query, ref_len, query_len);
-    struct sw_entry my_entry = {1.1, 'a'};
-    printf("sw_entry %lu\nfloat %lu\nchar %lu\n", 
-            sizeof (my_entry),
-            sizeof (1.11/1.2),
-            sizeof ('a'));
-
+    printf("ref=%s\nquery=%s\nref_len=%i query_len=%i\n", ref, query, ref_len, query_len);
     swalign(ref, query);
     print_matrix(query_len +1, ref_len +1);
     return 0;
