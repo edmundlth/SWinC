@@ -56,13 +56,13 @@ float gap_extension = 0.0;
 
 static struct sw_entry null_entry = {0.0, '\0'};
 /* initialise sw_matrix as (MAX_SEQ_LEN+1) x (MAX_SEQ_LEN+1)
- * matrix +1 for the initial 0 row and column. */
+ * all entries will be initialised with struct sw_entry = {0.0,'\0'} */
 static struct sw_entry sw_matrix[MAX_SEQ_LEN +1][MAX_SEQ_LEN +1];
 
 /* external variable recording the reference and query sequence
  * visible to all the alignment/scoring related functions */
-const char *g_ref;
-const char *g_query;
+char *g_ref;
+char *g_query;
 
 
 /******************************************************************************/
@@ -74,9 +74,15 @@ int main(int argc, char **argv){
     char *query = argv[2];
     int ref_len = strlen(ref);
     int query_len = strlen(query);
+    printf("%s\n%s\n%i %i\n", ref, query, ref_len, query_len);
+    struct sw_entry my_entry = {1.1, 'a'};
+    printf("sw_entry %lu\nfloat %lu\nchar %lu\n", 
+            sizeof (my_entry),
+            sizeof (1.11/1.2),
+            sizeof ('a'));
 
     swalign(ref, query);
-    print_matrix(ref_len +1, query_len +1);
+    print_matrix(query_len +1, ref_len +1);
     return 0;
 }
 
