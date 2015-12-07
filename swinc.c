@@ -18,96 +18,29 @@
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
+#include "swinc.h"
 
-/* define maximum primer + heel length acceptable */
-#define MAX_SEQ_LEN 60
-
-/* produce record of nearest neighbour thermodynamic
- * data here. It should be in "hash table" like 
- * structure
- */
-
-
-/* Record score and decision at every sw_matrix entry
- * the decision are 
- *   'M' for match
- *   'm' for mismatch
- *   'D' for deletion
- *   'I' for insertion
- *   '\0' for termimate alignment */
-typedef struct {
-    float score;
-    char decision;
-} SW_entry;
-
-float swalign(char *ref, char *query);
-float fill_matrix(int ref_len, int query_len);
-float score(int row, int col);
-SW_entry score_mm(int row, int col);
-SW_entry score_insert(int row, int col);
-SW_entry score_delete(int row, int col);
-float penalise_gap(int gap_len);
-SW_entry max(SW_entry list[], int list_len);
-void print_sw_matrix(int nrow, int ncol);
-
-void print_interaction_matrix(int nrow, int ncol);
-void align_pool(int pool_size);
-int get_primers(char *filename);
-
-void rev_complement(char *seq, char *new);
-
-float match_score = 2.0;
-float mismatch_penalty = -1.0;
-float gap_open = -1.0;
-float gap_extension = 0.0;
-
-static SW_entry null_entry = {0.0, '\0'};
-/* initialise sw_matrix as (MAX_SEQ_LEN+1) x (MAX_SEQ_LEN+1)
- * all entries will be initialised with SW_entry = {0.0,'\0'} */
-static SW_entry sw_matrix[MAX_SEQ_LEN +1][MAX_SEQ_LEN +1];
-
-/* external variable recording the reference and query sequence
- * visible to all the alignment/scoring related functions */
-char *g_ref;
-char *g_query;
-
-
-/******************************************************************************/
-#define MAX_POOL_SIZE 100
-float interaction_matrix[MAX_POOL_SIZE][MAX_POOL_SIZE];
-char pool[MAX_POOL_SIZE][MAX_SEQ_LEN];
 /* main() */
 int main(int argc, char **argv){
-    char *ref = argv[1];
-    char *query = argv[2];
-    int ref_len = strlen(ref);
-    int query_len = strlen(query);
-    float align_score;
-    printf("ref=%s\nquery=%s\nref_len=%i query_len=%i\n", ref, query, ref_len, query_len);
-    align_score = swalign(ref, query);
-    print_sw_matrix(query_len +1, ref_len +1);
-    printf("Alignment score = %.2f\n\n", align_score);
+    //char *ref = argv[1];
+    //char *query = argv[2];
+    //int ref_len = strlen(ref);
+    //int query_len = strlen(query);
+    //float align_score;
+    //printf("ref=%s\nquery=%s\nref_len=%i query_len=%i\n", ref, query, ref_len, query_len);
+    //align_score = swalign(ref, query);
+    //print_sw_matrix(query_len +1, ref_len +1);
+    //printf("Alignment score = %.2f\n\n", align_score);
 
     char *filename = argv[3];
     int num_primer;
+    float max_interaction[num_primer], mean_interaction[num_primer];
     num_primer = get_primers(filename);
     printf("num_primer = %i\n", num_primer);
 
     align_pool(num_primer);
     print_interaction_matrix(num_primer, num_primer);
     return 0;
-}
-
-int get_primers(char *filename){
-    FILE *file_handle = fopen(filename, "r");
-    int i = 0;
-    char buff[MAX_SEQ_LEN];
-    char *temp;
-    while ((temp = fgets(buff, MAX_SEQ_LEN, file_handle)) != NULL){
-        strcpy(pool[i], temp);
-        i++;
-    }
-    return i;
 }
 
 /* align_pool:
@@ -118,10 +51,33 @@ int get_primers(char *filename){
  * by default we don't want information about self-alignment.*/
 void align_pool(int pool_size){
     int i, j;
-    for (i = 0; i < pool_size; i++)
-        for (j = 0; j < pool_size; j++)
-            interaction_matrix[i][j] = (i>=j)? 0.0 : swalign(pool[i], pool[j]);
+    for (i = 0; i < pool_size; i++){
+        for (j = 0; j < pool_size; j++){
+            char *this_query;
+            this_query = rev_complement(pool[j]);
+            interaction_matrix[i][j] = (i==j)? 
+                                       0.0 : 
+                                       swalign(pool[i], this_query);
+        }
+    }
 }
+
+
+int get_primers(char *filename){
+    FILE *file_handle = fopen(filename, "r");
+    int i = 0;
+    char buff[MAX_SEQ_LEN];
+    char *temp;
+    while ((temp = fgets(buff, MAX_SEQ_LEN, file_handle)) != NULL){
+        temp = trim_whitespace(temp); //temp[strlen(temp)-1] = '\0';//remove trailing newline
+        strcpy(pool[i], temp);
+        i++;
+    }
+    fclose(file_handle);
+    return i;
+}
+
+/******************** SW alignment algorithm ****************************/
 
 /* swalign: produce the best alignment score for the 2 input string */
 float swalign(char *ref, char *query){
@@ -239,11 +195,19 @@ void print_sw_matrix(int nrow, int ncol){
 
 void print_interaction_matrix(int nrow, int ncol){
     register int row, col;
+    float max_interaction, temp;
+    float average_interaction;
     for (row = 0; row < nrow; row++){
+        printf("%60s ", pool[row]);
+        max_interaction = 0.0;
         for (col = 0; col < ncol; col++){
-            printf("%.2f ", interaction_matrix[row][col]);
+            temp = interaction_matrix[row][col];
+            printf("%.2f ", temp);
+            if (temp > max_interaction)
+                max_interaction = temp;
         }
-        putchar('\n');
+        average_interaction = mean(interaction_matrix[row], ncol);
+        printf("\t max= %.2f \tmean= %.2f\n", max_interaction, average_interaction);
     }
 }
 
@@ -263,17 +227,38 @@ char complement(char base){
             return 'G';
             break;
         default:
-            return '\0';
+            return 'N';
             break;
     }
 }
 
 
-void rev_complement(char *seq, char *new){
+char *rev_complement(char *seq){
     int len = strlen(seq);
+    static char result[MAX_SEQ_LEN];
     int i;
     for (i = 0; i < len; i++)
-        new[i] = complement(seq[len-i-1]);
-    new[len] = '\0';
+        result[i] = complement(seq[len-i-1]);
+    result[len] = '\0';
+    return result;
 }
 
+float mean(float num_list[], int list_len){
+    float result;
+    register int i;
+    for (i = 0; i < list_len; i++)
+        result += num_list[i];
+    return result / (float) list_len;
+}
+
+char *trim_whitespace(char *input){
+    while (isspace(*input)) 
+        input++;
+    int len = strlen(input);
+    char *endpointer = input + len -1;
+    while (isspace(*endpointer) && endpointer != input)
+        endpointer--;
+    if (input + len -1 != endpointer) // if trailing space exist
+        *(endpointer +1) = '\0'; // terminate string before space
+    return input;
+}
