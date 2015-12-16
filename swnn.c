@@ -1,14 +1,17 @@
 #include <stdlib.h>
+#include <ctype.h>
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
 #include "swnn.h"
 
-static void initialise_matrix(SW_Entry **sw_matrix, int nrow, int ncol);
+static SW_Entry **initialise_matrix(int nrow, int ncol);
 static Decision_Record best_record(Decision_Record records[], int nrecord);
 
 int main()
 {
+    float score = swnnalign("ATGCATGCATGCATGCATGCATGC", "TACGTACGTACGTACGTACGTACG");
+    printf("%.2f\n", score);
     return 0;
 }
 
@@ -30,8 +33,8 @@ float swnnalign(char *ref, char *query)
     // reserve memory for sw_matrix (uninitialised)
     // This matrix will be pass around by all the scoring
     // routines.
-    SW_Entry sw_matrix[nrow][ncol];
-    initialise_matrix(sw_matrix, nrow, ncol);
+    SW_Entry **sw_matrix = initialise_matrix(nrow, ncol);
+//    initialise_matrix(sw_matrix, nrow, ncol);
     for (row = 1; row < nrow; row++)
     {
         for (col = 1; col < ncol; col++)
@@ -41,11 +44,11 @@ float swnnalign(char *ref, char *query)
                                                 ref, query);
         }
     }
-    best_score = find_best_score(sw_matrix);
+    best_score = find_best_score(sw_matrix, nrow, ncol);
     return best_score;
 }
 
-SW_Entry compute_entry(SW_entry **sw_matrix,
+SW_Entry compute_entry(SW_Entry **sw_matrix,
                        int row, int col,
                        char *ref, char *query)
 {
@@ -63,6 +66,27 @@ SW_Entry compute_entry(SW_entry **sw_matrix,
 }
 
 
+
+float find_best_score(SW_Entry **sw_matrix, int nrow, int ncol)
+{
+    register int row, col;
+    float lowest_delG = 0.0;
+    float new_delG;
+    SW_Entry current_entry;
+    for (row = 0; row < nrow; row++)
+    {
+        for (col = 0; col < ncol; col++)
+        {
+            current_entry = sw_matrix[row][col];
+            Decision_Record three_options[] = {current_entry.match,
+                                               current_entry.insertion,
+                                               current_entry.deletion};
+            new_delG = best_record(three_options, 3).delG;
+            lowest_delG = (new_delG < lowest_delG) ? new_delG : lowest_delG;
+        }
+    }
+    return lowest_delG;
+}
 
 
 
@@ -112,7 +136,7 @@ Decision_Record score_match(SW_Entry **sw_matrix,
         we assume mismatch. If the next one is mismatch, it should break
         and extend */
         match_match.delG = prev_entry.match.delG + get_delG(nn_config);
-        match_match.loop_len = 1
+        match_match.loop_len = 1;
     } else
     {/* double mismatch must be internal loop of part of a larger loop,
         break previous loop and extend loop length by one */
@@ -170,23 +194,20 @@ Decision_Record score_insertion(SW_Entry **sw_matrix,
     Decision_Record match_insertion; // bulge loop of size 1
     Decision_Record insertion_insertion; // bulge loop of size prev_size+1
 
-    int is_previous_complement = is_complement(match_insertion_config.top5,
-                                               match_insertion_config.bottom3);
-
-
     // size 1 bulge is special. Need consider the 2 bases flanking the bulge
     Neighbour intervening_bases_config = {ref[col -1], ref[col +1],
                                           query[row -1], query[row]};
     match_insertion.delG = prev_entry.match.delG + \
                            size_1_bulge(intervening_bases_config);
     match_insertion.current_state = INSERTION;
-    match_insertion.previous_decision = (is_previous_complement) ? MATCH : MISMATCH;
+    match_insertion.previous_decision = (is_complement(ref[col], query[row-1])) ?
+                                        MATCH : MISMATCH;
     match_insertion.loop_len = 1;
 
     insertion_insertion.delG = prev_entry.insertion.delG + \
                                extend_bulge_loop(prev_entry.insertion.loop_len);
     insertion_insertion.current_state = INSERTION;
-    insertion_insertion.previous_state = INSERTION;
+    insertion_insertion.previous_decision = INSERTION;
     insertion_insertion.loop_len = prev_entry.insertion.loop_len +1;
 
     Decision_Record two_options[] = {match_insertion, insertion_insertion};
@@ -215,23 +236,20 @@ Decision_Record score_deletion(SW_Entry **sw_matrix,
     Decision_Record match_deletion; // bulge loop of size 1
     Decision_Record deletion_deletion; // bulge loop of size prev_size+1
 
-    int is_previous_complement = is_complement(match_deletion_config.top5,
-                                               match_deletion_config.bottom3);
-
-
     // size 1 bulge is special. Need consider the 2 bases flanking the bulge
     Neighbour intervening_bases_config = {ref[col -1], ref[col],
                                           query[row -1], query[row +1]};
     match_deletion.delG = prev_entry.match.delG + \
                            size_1_bulge(intervening_bases_config);
     match_deletion.current_state = INSERTION;
-    match_deletion.previous_decision = (is_previous_complement) ? MATCH : MISMATCH;
+    match_deletion.previous_decision = (is_complement(ref[row -1], query[col])) ? 
+                                        MATCH : MISMATCH;
     match_deletion.loop_len = 1;
 
     deletion_deletion.delG = prev_entry.deletion.delG + \
                                extend_bulge_loop(prev_entry.deletion.loop_len);
     deletion_deletion.current_state = INSERTION;
-    deletion_deletion.previous_state = INSERTION;
+    deletion_deletion.previous_decision = INSERTION;
     deletion_deletion.loop_len = prev_entry.deletion.loop_len +1;
 
     Decision_Record two_options[] = {match_deletion, deletion_deletion};
@@ -243,17 +261,68 @@ Decision_Record score_deletion(SW_Entry **sw_matrix,
 
 /********************** THERMODYNAMICS ROUTINES ****************************/
 
-float get_delG(Neighbour nn_config);
-float size_1_bulge(Neighbour intervening_bases_config);
+
+/* !!! This is currently a quick hack only. Should ultimately use random
+ * access method. */
+float get_delG(Neighbour nn_config)
+{
+    int num_match_data = 10;
+    int num_mismatch_data = 87;
+    register int i;
+    int found = 0;
+    char neighbour[] = {nn_config.top5,
+                        nn_config.top3,
+                        '/',
+                        nn_config.bottom3,
+                        nn_config.bottom5,
+                        '\0'};
+    char rotated_neighbour[] = {nn_config.bottom5,
+                                nn_config.bottom3,
+                                '/',
+                                nn_config.top3,
+                                nn_config.top5,
+                                '\0'};
+    Therm_Param param_record;
+    for (i = 0; i < num_match_data + num_mismatch_data && !found; i++)
+    {
+        if (i < 10)
+        {
+            param_record = Match[i];
+        } else
+        {
+            param_record = Internal_Mismatch[i-10];
+        }
+        if (strcmp(param_record.neighbour,neighbour) == 0 ||
+                strcmp(param_record.neighbour, rotated_neighbour) == 0)
+        {
+            found = 1;
+        }
+    }
+    float delG, delH, delS, temperature;
+    temperature = Reaction_Temperature + ABSOLUTE_ZERO_OFFSET;
+    delH = param_record.delH;
+    delS = param_record.delS;
+    delG = delH * 1000.0 + temperature * delS;
+    printf("%s dH= %.2f dS= %.2f dG= %.2f\n", neighbour, delH, delS, delG);
+    return delG;
+}
 
 /* !! The idea for extension is add on gradient(prev_len). */
-float extend_internal_loop(int previous_loop_len);
-float extend_bulge_loop(int previous_loop_len);
+float extend_internal_loop(int previous_loop_len)
+{
+    return 0.0;
+}
+
+float extend_bulge_loop(int previous_loop_len)
+{
+    return 0.0;
+}
 
 /* size_1_bulge: */
 float size_1_bulge(Neighbour intervening_bases_config)
 {
-    return get_delG(intervening_bases_config) + bulge_penalty + AT_penalty;
+    return 0.0;
+    //return get_delG(intervening_bases_config) + bulge_penalty + AT_penalty;
 }
 
 
@@ -263,24 +332,38 @@ float size_1_bulge(Neighbour intervening_bases_config)
 /* initialise_matrix:
  * given a sw_matrix of dimension nrow x nrow, populate all of its first
  * row and first col with null entry */
-static void initialise_matrix(SW_Entry **sw_matrix, int nrow, int ncol)
+static SW_Entry **initialise_matrix(int nrow, int ncol)
 {
-    Decision_Record null_decision = {0.0, STOP, STOP};
+    register int i;
+    SW_Entry **sw_matrix = malloc(sizeof(SW_Entry *) * nrow);
+    for (i = 0; i < nrow; i++)
+    {
+        sw_matrix[i] = malloc(sizeof(SW_Entry) * ncol);
+    }
+    if (sw_matrix == NULL)
+    {
+        fprintf(stderr, "swnn: memory allocation error");
+        exit(EXIT_FAILURE);
+    }
+    Decision_Record null_decision = {0.0, STOP, STOP, 0};
     SW_Entry null_entry = {
                            null_decision,
                            null_decision,
                            null_decision
                           };
     register int row, col;
-    for (row = 0, col = 0; row < nrow; row++)
+    for (row = 0; row < nrow; row++)
     {
-        sw_matrix[row][col] = null_entry;
+        sw_matrix[row][0] = null_entry;
     }
-    for (col = 0, row = 0; col < ncol; col++)
+    for (col = 0; col < ncol; col++)
     {
-        sw_matrix[row][col] = null_entry;
+        sw_matrix[0][col] = null_entry;
     }
+    return sw_matrix;
 }
+
+
 
 /* complement: return the complement of given base
  * character in upper case */
@@ -301,7 +384,7 @@ char complement(char base)
             return 'C';
             break;
         default:
-            return NULL;
+            return '\0';
             break;
     }
 }
@@ -319,6 +402,10 @@ int is_complement(char base1, char base2)
     }
 }
 
+
+/* best_record: private routine that select the best decision
+ * among the list of decision record.
+ * !! best is currently defined as lowest delG value. */
 static Decision_Record best_record(Decision_Record records[], int nrecord)
 {
     Decision_Record best_record = records[0]; // assume at least 1 in list
