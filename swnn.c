@@ -10,7 +10,8 @@ static Decision_Record best_record(Decision_Record records[], int nrecord);
 
 int main()
 {
-    float score = swnnalign("ATGCATGCATGCATGCATGCATGC", "TACGTACGTACGTACGTACGTACG");
+    float score = swnnalign("AAA",
+                            "TTT");
     printf("%.2f\n", score);
     return 0;
 }
@@ -29,12 +30,15 @@ float swnnalign(char *ref, char *query)
     // We also need to add extra 1 row and col to the matrix.
     int nrow = strlen(query) +1;
     int ncol = strlen(ref) +1;
-    register int row, col;
     // reserve memory for sw_matrix (uninitialised)
     // This matrix will be pass around by all the scoring
     // routines.
+    // The matrix will be initialised with all of first
+    // row and first column being the null entry
+    // { {0, STOP, STOP, 0}, ... }
     SW_Entry **sw_matrix = initialise_matrix(nrow, ncol);
-//    initialise_matrix(sw_matrix, nrow, ncol);
+    // Now fill up the matrix.
+    register int row, col;
     for (row = 1; row < nrow; row++)
     {
         for (col = 1; col < ncol; col++)
@@ -82,7 +86,8 @@ float find_best_score(SW_Entry **sw_matrix, int nrow, int ncol)
                                                current_entry.insertion,
                                                current_entry.deletion};
             new_delG = best_record(three_options, 3).delG;
-            lowest_delG = (new_delG < lowest_delG) ? new_delG : lowest_delG;
+            lowest_delG = (new_delG < lowest_delG) ? 
+                           new_delG : lowest_delG;
         }
     }
     return lowest_delG;
@@ -122,20 +127,20 @@ Decision_Record score_match(SW_Entry **sw_matrix,
     match_match.current_state = (is_current_complement) ? MATCH : MISMATCH;
     if (is_current_complement && is_previous_complement)
     {// the nicest case where we just zip the nearest neighbour delG value
-        match_match.delG = prev_entry.match.delG + get_delG(nn_config);
+        match_match.delG = prev_entry.match.delG + get_delG_internal(nn_config);
     } else if (is_current_complement && prev_entry.match.loop_len > 1)
     {//!! previous mismatch is part of internal loop that assume current complement
         match_match.delG = prev_entry.match.delG;
         match_match.loop_len = 0;
     }else if (is_current_complement && prev_entry.match.loop_len == 1)
     {// this is just a MXM situation, we have nearest neighbour data
-        match_match.delG = prev_entry.match.delG + get_delG(nn_config);
+        match_match.delG = prev_entry.match.delG + get_delG_internal(nn_config);
         match_match.loop_len = 0;
     } else if (is_previous_complement)
     {/* maybe just a mismatch or the begining of internal loop,
         we assume mismatch. If the next one is mismatch, it should break
         and extend */
-        match_match.delG = prev_entry.match.delG + get_delG(nn_config);
+        match_match.delG = prev_entry.match.delG + get_delG_internal(nn_config);
         match_match.loop_len = 1;
     } else
     {/* double mismatch must be internal loop of part of a larger loop,
@@ -262,54 +267,101 @@ Decision_Record score_deletion(SW_Entry **sw_matrix,
 /********************** THERMODYNAMICS ROUTINES ****************************/
 
 
-/* !!! This is currently a quick hack only. Should ultimately use random
- * access method. */
-float get_delG(Neighbour nn_config)
+#define INTERNAL_A 0
+#define INTERNAL_C 1
+#define INTERNAL_G 2
+#define INTERNAL_T 3
+#define TERMINAL_DOT 0
+#define TERMINAL_A 1
+#define TERMINAL_C 2
+#define TERMINAL_G 3
+#define TERMINAL_T 4
+
+#define NUM_SYS_BASE_INTERNAL 4
+#define NUM_SYS_BASE_TERMINAL 5
+
+int _digit_internal(char base)
 {
-    int num_match_data = 10;
-    int num_mismatch_data = 87;
-    register int i;
-    int found = 0;
-    char neighbour[] = {nn_config.top5,
-                        nn_config.top3,
-                        '/',
-                        nn_config.bottom3,
-                        nn_config.bottom5,
-                        '\0'};
-    char rotated_neighbour[] = {nn_config.bottom5,
-                                nn_config.bottom3,
-                                '/',
-                                nn_config.top3,
-                                nn_config.top5,
-                                '\0'};
-    Therm_Param param_record;
-    for (i = 0; i < num_match_data + num_mismatch_data && !found; i++)
+    int digit;
+    switch (base)
     {
-        if (i < 10)
-        {
-            param_record = Match[i];
-        } else
-        {
-            param_record = Internal_Mismatch[i-10];
-        }
-        if (strcmp(param_record.neighbour,neighbour) == 0 ||
-                strcmp(param_record.neighbour, rotated_neighbour) == 0)
-        {
-            found = 1;
-        }
+        case 'A':
+             digit = INTERNAL_A;
+             break;
+        case 'C':
+             digit = INTERNAL_C;
+             break;
+        case 'G':
+             digit = INTERNAL_G;
+             break;
+        case 'T':
+             digit = INTERNAL_T;
+             break;
+        default:
+        digit = -1;
     }
-    float delG, delH, delS, temperature;
-    temperature = Reaction_Temperature + ABSOLUTE_ZERO_OFFSET;
-    delH = param_record.delH;
-    delS = param_record.delS;
-    delG = delH * 1000.0 + temperature * delS;
-    printf("%s dH= %.2f dS= %.2f dG= %.2f\n", neighbour, delH, delS, delG);
-    return delG;
+    return digit;
 }
+
+int _digit_terminal(char base)
+{
+    int digit;
+    switch (base)
+    {
+        case 'A':
+             digit = TERMINAL_A;
+             break;
+        case 'C':
+             digit = TERMINAL_C;
+             break;
+        case 'G':
+             digit = TERMINAL_G;
+             break;
+        case 'T':
+             digit = TERMINAL_T;
+             break;
+        default:
+        digit = -1;
+    }
+    return digit;
+}
+
+
+    
+int _get_index_internal(Neighbour nn_config)
+{
+    int index = 0;
+    printf("%c%c/%c%c\n", nn_config.top5, nn_config.top3, nn_config.bottom3, nn_config.bottom5);
+    index += _digit_internal(nn_config.top5) * pow(NUM_SYS_BASE_INTERNAL, 3);
+    index += _digit_internal(nn_config.top3) * pow(NUM_SYS_BASE_INTERNAL, 2);
+    index += _digit_internal(nn_config.bottom3) * pow(NUM_SYS_BASE_INTERNAL, 1);
+    index += _digit_internal(nn_config.bottom5) * pow(NUM_SYS_BASE_INTERNAL, 0);
+    return index;
+}
+
+int _get_index_terminal(Neighbour nn_config)
+{
+    int index = 0;
+    index += _digit_terminal(nn_config.top5) * pow(NUM_SYS_BASE_TERMINAL, 3);
+    index += _digit_terminal(nn_config.top3) * pow(NUM_SYS_BASE_TERMINAL, 2);
+    index += _digit_terminal(nn_config.bottom3) * pow(NUM_SYS_BASE_TERMINAL, 1);
+    index += _digit_terminal(nn_config.bottom5) * pow(NUM_SYS_BASE_TERMINAL, 0);
+    return index;
+}
+
+
+float get_delG_internal(Neighbour nn_config)
+{
+    int index = _get_index_internal(nn_config);
+    Therm_Param record = nn_data_internal[index];
+    return record.delH * 1000.0 - (Reaction_Temperature + ABSOLUTE_ZERO_OFFSET) * record.delS;
+}
+
 
 /* !! The idea for extension is add on gradient(prev_len). */
 float extend_internal_loop(int previous_loop_len)
 {
+
     return 0.0;
 }
 
@@ -321,8 +373,9 @@ float extend_bulge_loop(int previous_loop_len)
 /* size_1_bulge: */
 float size_1_bulge(Neighbour intervening_bases_config)
 {
-    return 0.0;
-    //return get_delG(intervening_bases_config) + bulge_penalty + AT_penalty;
+    float bulge_penalty = 4.0;
+    float AT_penalty = 1.0;
+    return get_delG_internal(intervening_bases_config) + bulge_penalty + AT_penalty;
 }
 
 

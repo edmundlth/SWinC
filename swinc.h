@@ -1,43 +1,92 @@
 
-/* define maximum primer + heel length acceptable */
+/* maximum primer + heel length acceptable 
+ * kmer size is the number of bases from the 
+ * 3' end of query to be align to a reference*/
 #define MAX_SEQ_LEN 60
 #define MAX_POOL_SIZE 10000
+#define KMER_SIZE 20
+#define TEST_REF AAAATTTTGGGGCCCC
+#define TEST_QUERY AAAATTAAAAGGGGCCCC
+
 /***** Parameters and variables for SW alignment ************/
-float match_score = 2.0;
-float mismatch_penalty = -1.0;
-float gap_open = -1.0;
-float gap_extension = 0.0;
+#define DEFAULT_MATCH_SCORE 1.0
+#define DEFAULT_MISMATCH_PENALTY -1.0
+#define DEFAULT_GAP_OPEN_PENALTY -2.0
+#define DEFAULT_GAP_EXTENSION_PENALTY DEFAULT_GAP_OPEN_PENALTY
+// if not specified, extending a gap cost as much as opening a gap
+
+/* a record of the parameters that will be used in scoring */
+typedef struct
+{
+    float match_score;
+    float mismatch_penalty;
+    float gap_open_penalty;
+    float gap_extension_penalty;
+} Score_Param;
+
+/* a record of user commandline input */
+typedef struct {
+    char *ref;
+    char *query;
+    char *primer_filename;
+    Score_Param score_param;
+    int verbose_flag;
+} User_Inputs;
+
 
 /* Record score and decision at every sw_matrix entry
- * the decision are 
+ * the decisions are 
  *   'M' for match
- *   'm' for mismatch
+ *   'X' for mismatch
  *   'D' for deletion
  *   'I' for insertion
- *   '\0' for termimate alignment */
+ *   'T' for termimate alignment 
+ *   There will be 2 characters in each decision entry
+ *   the first records the immediate previous decision 
+ *   that leads to the current decision and the second
+ *   record the current state.
+ *   eg: {2.3, "DM"} says: previous alignment was a deletion
+ *   and we follow on that with a match the score will
+ *   be 2.3. */
 typedef struct {
     float score;
-    char decision;
+    char *decision;
+} Decision_Record;
+
+
+/* Each entry in sw_matrix has 3 "points". 
+ * Each of them represent a possible current state, which
+ * are "in a match-mismatch", "in an insert state",
+ * "in a deletion state". 
+ * The later 2 states are instances of gapped state which
+ * insert being gaps in the reference and deletion being
+ * gaps in the query */
+typedef struct {
+    Decision_Record match_record;
+    Decision_Record insert_record;
+    Decision_Record delete_record;
 } SW_entry;
-static SW_entry null_entry = {0.0, '\0'};
-/* initialise sw_matrix as (MAX_SEQ_LEN+1) x (MAX_SEQ_LEN+1)
- * all entries will be initialised with SW_entry = {0.0,'\0'} */
-static SW_entry sw_matrix[MAX_SEQ_LEN +1][MAX_SEQ_LEN +1];
-/* external variable recording the reference and query sequence
- * visible to all the alignment/scoring related functions */
-char *g_ref;
-char *g_query;
-int ref_len;
-int query_len;
+
 
 
 /***** Routines for sw alignment *************/
-float swalign(char *ref, char *query);
-float fill_matrix(int ref_len, int query_len);
-float score(int row, int col);
-SW_entry score_mm(int row, int col);
-SW_entry score_insert(int row, int col);
-SW_entry score_delete(int row, int col);
+float swalign(char *ref, char *query, Score_Param score_param);
+float fill_matrix(SW_entry **sw_matrix, 
+                  char *ref, char *query, 
+                  Score_Param score_param);
+float score(SW_entry **sw_matrix, 
+            char *ref, char *query,
+            Score_Param score_param);
+Decision_Record score_match_mismatch(SW_entry **sw_matrix,
+                              char *ref, char *query,
+                              int row, int col,
+                              Score_Param score_param);
+Decision_Record score_insert(SW_entry **sw_matrix,
+                      int row, int col,
+                      Score_Param score_param);
+Decision_Record score_delete(SW_entry **sw_matrix,
+                      int row, int col,
+                      Score_Param score_param);
 float penalise_gap(int gap_len);
 SW_entry max(SW_entry list[], int list_len);
 
@@ -60,11 +109,28 @@ void print_alignment(int nrow, int ncol);
 char *prepend_char(char *string, char c);
 int *best_entry(int nrow, int ncol);
 void print_interaction_matrix(int nrow, int ncol);
-char *rev_complement(char *seq, int result_len, char *result);
+char *rev_complement(char *seq, int result_len);
 float mean(float num_list[], int list_len);
 char *trim_whitespace(char *input);
+User_Inputs parse_args(int argc, char **argv);
 
 
+#define PROGRAM_NAME "swinc"
+enum
+{
+    ERROR_MEM_ALLOC = 1
+};
+
+void error_handle(int error_code)
+{
+    fprintf(stderr, "%s error:\n", PROGRAM_NAME);
+    switch (error_code)
+    {
+        case ERROR_MEM_ALLOC:
+            fprintf(stderr, "Memory allocation error");
+            break;
+    }
+}
 
 
 
