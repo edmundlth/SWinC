@@ -133,7 +133,7 @@ float get_delG_terminal(Neighbour nn_config);
 float size_1_bulge(Neighbour intervening_bases_config);
 float extend_internal_loop(int previous_loop_len);
 float extend_bulge_loop(int previous_loop_len);
-
+float init_delG(char base);
 
 /************************** UTILITIES ROUTINES ******************************/
 char complement(char base);

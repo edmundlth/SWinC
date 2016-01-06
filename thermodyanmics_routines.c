@@ -104,7 +104,25 @@ float get_delG_terminal(Neighbour nn_config)
            - (GLOBAL_Reaction_Temperature + ABSOLUTE_ZERO_OFFSET) * record.delS;
 }
 
-
+float init_delG(char base)
+{
+    extern const Therm_Param GLOBAL_init_GC;
+    extern const Therm_Param GLOBAL_init_AT;
+    extern float GLOBAL_Reaction_Temperature;
+    float delG;
+    if (base == 'A' || base == 'T')
+    {
+        return GLOBAL_init_AT.delH * 1000.0 - \
+               GLOBAL_init_AT.delS * \
+               (GLOBAL_Reaction_Temperature + ABSOLUTE_ZERO_OFFSET);
+    } else if (base == 'G' || base == 'C')
+    {
+        return GLOBAL_init_GC.delH * 1000.0 - \
+               GLOBAL_init_GC.delS * \
+               (GLOBAL_Reaction_Temperature + ABSOLUTE_ZERO_OFFSET);
+    }
+}
+        
 
 /*************************************************
  * Nearest Neighbour Thermodynamics Parameters *

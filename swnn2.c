@@ -32,27 +32,21 @@ int main()
  * and a query sequence (antisense sequence)
  * return a DP matrix recording all the decisions and scores. 
  */
-SW_Entry **duplex_matrix(char *ref, char *query)
+SW_Entry **complete_duplex_matrix(char *ref, char *query)
 {
-    int nrow = strlen(query) +1;
+    // initialise matrix base on 
     // the matrix layout:
     // reference is on the horizontal while
     // query is at the bottom. 
-    // We add an extra row for initialisation.
-    int ncol = strlen(ref) +1;
-    // The matrix will be initialise with all
-    // of first row and first col being null entry
-    // eg. the element [0][0] will be 
-    // {{0, STOP, STOP, 0}, 
-    //  {0, STOP, STOP, 0}, 
-    //  {0, STOP, STOP, 0}, 
-    //  {0, STOP, STOP,0}}
-    //  !!! THIS NEED TO BE CHANGED!!! INITIATION IS DEPENDEND ON SEQUENCE
-    //  !!! CONTEXT, WE NEED TO ACCOUNT FOR INTIATION_ENTROPY AND 
-    //  !!! TERMINAL EFFECTS (DANGLING ENDS AND MISMATCHES).
-    SW_Entry **sw_matrix = initialise_matrix(nrow, ncol);
+    // Initiation is considerate of dangling ends and
+    // init_AT or init_GC scenarios.
+    int nrow = strlen(query);
+    int ncol = strlen(ref);
+    SW_Entry **sw_matrix = initialise_duplex_matrix(ref, query);
     // now we fill up the matrix
     register int row, col;
+    // start from 1, since the 0th row and col 
+    // had been filled during initiation
     for (row = 1; row < nrow; row++)
     {
         for (col = 1; col < ncol; col++)
@@ -87,7 +81,60 @@ SW_Entry compute_entry(SW_Entry **sw_matrix,
 }
 
 
+/* find_best_decision: find the best recorded decision in the whole
+ * sw_matrix. We look through only the last row and column.
+ */
+Coord find_best_decision(SW_Entry **sw_matrix, int nrow, int ncol)
+{
+    register int row, col;
+    Coord best_coord;
+    SW_Entry this_entry;
+    Decision_Record this_record;
+    float lowest_delG = 0.0;
+    const int num_choice = 3;
+    int choice;
+    // look through the last column then the last row
+    // we favour the bottom right entries.
+    // first, the last column
+    for (col = ncol -1, row = 0; row < nrow -1; row++)
+    {
+        this_entry = sw_matrix[row][col];
+        Decision_Record all_records = {this_entry.bind,
+                                       this_entry.top_bulge,
+                                       this_entry.bottom_bulge};
+        for (choice = 0; choice < num_choice; choice++)
+        {
+            this_record = all_records[choice];
+            if (this_record.delG < lowest_delG)
+            {
+                lowest_delG = this_record.delG;
+                best_coord = {row, col, this_record.current_decision};
+            }
+        }
+    }
+    // then the last row
+    for (col = 0, row = nrow -1; col < ncol; col++) 
+    {
+        this_entry = sw_matrix[row][col];
+        Decision_Record all_records = {this_entry.bind,
+                                       this_entry.top_bulge,
+                                       this_entry.bottom_bulge};
+        for (choice = 0; choice < num_choice; choice++)
+        {
+            this_record = all_records[choice];
+            if (this_record.delG < lowest_delG)
+            {
+                lowest_delG = this_record.delG;
+                best_coord = {row, col, this_record.current_decision};
+            }
+        }
+    }
+    return best_coord;
+}
 
+
+    
+    
 Coord find_best_entry_coord(SW_Entry **sw_matrix, int nrow, int ncol)
 {
     register int row, col;
@@ -123,43 +170,6 @@ Coord find_best_entry_coord(SW_Entry **sw_matrix, int nrow, int ncol)
 
 
 /************************** UTILITIES ROUTINES ******************************/
-
-/* initialise_matrix:
- * given a sw_matrix of dimension nrow x nrow, populate all of its first
- * row and first col with null entry */
-static SW_Entry **initialise_matrix(int nrow, int ncol)
-{
-    register int i;
-    SW_Entry **sw_matrix = malloc(sizeof(SW_Entry *) * nrow);
-    for (i = 0; i < nrow; i++)
-    {
-        sw_matrix[i] = malloc(sizeof(SW_Entry) * ncol);
-    }
-    if (sw_matrix == NULL)
-    {
-        fprintf(stderr, "swnn: memory allocation error");
-        exit(EXIT_FAILURE);
-    }
-    Decision_Record null_decision = {0.0, STOP, STOP, 0, 0};
-    SW_Entry null_entry = {
-                           null_decision,
-                           null_decision,
-                           null_decision,
-                           null_decision
-                          };
-    register int row, col;
-    for (row = 0; row < nrow; row++)
-    {
-        sw_matrix[row][0] = null_entry;
-    }
-    for (col = 0; col < ncol; col++)
-    {
-        sw_matrix[0][col] = null_entry;
-    }
-    return sw_matrix;
-}
-
-
 
 /* complement: return the complement of given base
  * character in upper case */
