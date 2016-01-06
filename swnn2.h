@@ -14,6 +14,7 @@
 #define INTERNAL_C 1
 #define INTERNAL_G 2
 #define INTERNAL_T 3
+
 #define TERMINAL_DOT 0
 #define TERMINAL_A 1
 #define TERMINAL_C 2
@@ -102,10 +103,17 @@ Decision_Record score_top_bulge(SW_Entry **sw_matrix,
 Decision_Record score_bottom_bulge(SW_Entry **sw_matrix,
                                    int row, int col,
                                    char *ref, char *query);
+Decision_Record score_stop(SW_Entry **sw_matrix,
+                           int row, int col,
+                           char *ref, char *query);
 
 /********************** THERMODYNAMICS ROUTINES ****************************/
 float internal_loop_score(int top_loop_len, int bottom_loop_len);
+float bulge_score(int loop_len);
+int _get_index_internal(Neighbour nn_config);
+int _get_index_terminal(Neighbour nn_config);
 float get_delG_internal(Neighbour nn_config);
+float get_delG_terminal(Neighbour nn_config);
 float size_1_bulge(Neighbour intervening_bases_config);
 float extend_internal_loop(int previous_loop_len);
 float extend_bulge_loop(int previous_loop_len);
