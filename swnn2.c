@@ -14,13 +14,13 @@ Decision_Record best_record(Decision_Record records[], int nrecord);
 
 int main()
 {
-    Neighbour nn_config = {'A', 'C', 'T','A'};
-    extern const Therm_Param GLOBAL_nn_data_terminal[];
+    Neighbour nn_config = {'A', 'G', 'T','C'};
+    extern const Therm_Param GLOBAL_nn_data_internal[];
     extern float GLOBAL_Reaction_Temperature;
-    Therm_Param from_record = GLOBAL_nn_data_terminal[_get_index_terminal(nn_config)];
+    Therm_Param from_record = GLOBAL_nn_data_internal[_get_index_internal(nn_config)];
     printf("%s %f %f\n", from_record.neighbour, from_record.delH, from_record.delS);
     printf("delG = %f\n", from_record.delH * 1000.0 - (GLOBAL_Reaction_Temperature + ABSOLUTE_ZERO_OFFSET) * from_record.delS);
-    printf("delG_function = %f\n", get_delG_terminal(nn_config));
+    printf("delG_function = %f\n", get_delG_internal(nn_config));
     return 0;
 }
 
@@ -64,9 +64,6 @@ SW_Entry **duplex_matrix(char *ref, char *query)
     }
     return sw_matrix;
 }
-
-
-
 
 
 SW_Entry compute_entry(SW_Entry **sw_matrix,

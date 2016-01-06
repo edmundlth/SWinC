@@ -114,6 +114,8 @@ float get_delG_terminal(Neighbour nn_config)
 float GLOBAL_Reaction_Temperature = 60.0;
 float GLOBAL_Salt_Concentration = 50.0; // mMol
 
+const Therm_Param GLOBAL_init_GC = {"init_G/C", 0, 0};
+const Therm_Param GLOBAL_init_AT = {"init_A/T", 2.3, 4.1};
 const Therm_Param GLOBAL_Initialisation[] = {
     {"init", 0, 0}, 
     {"init_A/T", 2.3, 4.1}, 

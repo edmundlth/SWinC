@@ -26,8 +26,98 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include "swnn2.h"
 
+
+SW_Entry **initiate_duplex_matrix(char *ref, char *query)
+{
+    int nrow = strlen(query);
+    int ncol = strlen(ref);
+    SW_Entry **sw_matrix = _allocate_matrix(nrow, ncol);
+    sw_matrix[0][0] = _handle_first_entry(ref[0], query[0]);
+    register int i, j;
+    Neighbour nn_config;
+    for (i = 0, j = 1; j < ncol; j++)
+    {
+        nn_config = {ref[j -1], ref[j],
+                     '.', query[i]};
+        sw_matrix[i][j] = _handle_init_row_col(nn_config);
+    }
+    for (i = 1, j = 0; i < nrow; i++)
+    {
+        nn_config = {'.', ref[j],
+                     query[i -1], query[i]};
+        sw_matrix[i][j] = _handle_init_row_col(nn_config);
+    }
+}
+
+
+    
+SW_Entry **_allocate_matrix(int nrow, int ncol)
+{
+    register int i;
+    SW_Entry **sw_matrix = malloc(sizeof(SW_Entry *) * nrow);
+    for (i = 0; i < ncol; i++)
+    {
+        sw_matrix[i] = mallow(sizeof(SW_Entry) * ncol);
+    }
+    if (sw_matrix == NULL)
+    {
+        fprintf(stderr, "swnn: memory allocation error");
+        exit(EXIT_FAILURE);
+    }
+    return sw_matrix;
+}
+
+SW_Entry _handle_first_entry(char first_ref, char first_query)
+{
+    // handle first row first column where there is no dangling end.
+    // This entry, like the rest, has 3 "current_decisions".
+    // However, only the "bind" decision is relevant, others are all
+    // set to 0 delG and loop len. 
+    // if the first pair is a mismatch, there is no "initiation energy"
+    // and the loop len is 1.
+    // otherwise, we add either "init_GC" or "init_AT".
+    SW_Entry first_entry;
+    int loop_len = (is_complement(first_ref, first_query)) ? 0 : 1;
+    first_entry.top_bulge = {0.0, STOP, TOP_BULGE, loop_len, loop_len};
+    first_entry.bottom_bulge = {0.0, STOP, BOTTOM_BULGE, loop_len, loop_len};
+    if (loop_len == 1)
+    {// if they are not complement
+        first_entry.bind = {0.0, STOP, MISMATCH, loop_len, loop_len};
+    } else
+    {
+        Therm_Param init_parameter = (first_ref == 'G' || first_ref == 'C') ? 
+                                     GLOBAL_init_GC : GLOBAL_init_AT;
+        float init_delG = init_parameter.delH * 1000.0 \
+                          + (GLOBAL_Reaction_Temperature \
+                             + ABSOLUTE_ZERO_OFFSET) * init_parameter.delS;
+        first_entry.bind = {init_delG, STOP, MATCH, loop_len, loop_len}
+    }
+    return first_entry;
+}
+
+SW_Entry _handle_init_row_col(Neighbour nn_config)
+{
+    SW_Entry result_entry;
+    float init_delG;
+    int has_complement = (is_complement(nn_config.top5, nn_config.bottom3) ||
+                          is_complement(nn_config.top3, nn_config.bottom5)) ?
+                         0 : 1;
+    int loop_len = (has_complement) ? 0:1;
+    if (has_complement)
+    {
+        init_delG = get_delG_terminal(nn_config);
+        result_entry.bind = {init_delG, STOP, MATCH, loop_len, loop_len};
+    } else
+    {
+        result_entry.bind = {0.0, STOP, MATCH, loop_len, loop_len};
+    }
+    result_entry.top_bulge = {0.0, STOP, TOP_BULGE, loop_len, loop_len};
+    result_entry.bottom_bulge = {0.0, STOP, BOTTOM_BULGE, loop_len, loop_len};
+    return result_entry;
+}
 
 
 
@@ -279,6 +369,8 @@ Decision_Record score_top_bulge(SW_Entry **sw_matrix,
 // !!!!!!!!!! all the scoring function should be a function of "prev entry" only
 // should just pass in "prev_entry" not the whole matrix. 
 // this way, one should be able to handle both score_bulge in a single function.
+// !!!!!! add one single binding energy???? This can be applied to situation
+// where we "assume the base after a loop is binding".
 
 /* score_bottom_bulge:
  * compute the best (lowest delG) continuation if we are to choose
@@ -422,9 +514,10 @@ Decision_Record score_stop(SW_Entry **sw_matrix,
     // previous binding is a mismatch: 2 subcases
     //     -> loop len 1: backtrack the mismatch and replace it 
     //                    with terminal mismatch data
-    //     -> loop len > 1: it's an internal loop, already assume current
-    //                      base is a match, thus do nothing
-    //                      (!!! add one single binding energy????)
+    //     -> loop len > 1: it's an internal loop, but cannot end with a loop,
+    //                      thus we assume the entire loop + the tail which
+    //                      has not been score hanging, ie we back track the 
+    //                      loop penalty.
     // then, whichever the case, we add in both 3' and 5' dangling end
     //
     // Scheme 2: not counted as terminal.
@@ -447,4 +540,6 @@ Decision_Record score_stop(SW_Entry **sw_matrix,
                                                     continue_from_bottom_bulge};
     return best_record(three_continuation_records, 3);
 }
+
+
 

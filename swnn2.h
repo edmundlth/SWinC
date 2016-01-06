@@ -10,6 +10,8 @@
 #define BOTTOM_BULGE 'B'
 #define STOP 'S'
 
+#define ABSOLUTE_ZERO_OFFSET 273.15
+
 #define INTERNAL_A 0
 #define INTERNAL_C 1
 #define INTERNAL_G 2
@@ -85,6 +87,20 @@ typedef struct
     char bottom5;
 } Neighbour;
 
+/* The structure that record NN_data.
+ * e.g. Therm_Param record = {"AG/TC", -7.8, -21.0}
+ * is the record of enthalpy and entropy value of
+ * the neighbouring base paring 
+ *     5'-AG-3'
+ *     3'-TC-5'
+ */
+typedef struct {
+    char *neighbour;
+    float delH;
+    float delS;
+} Therm_Param;
+
+
 
 /************************** ALIGNMENT ROUTINES ******************************/
 SW_Entry **duplex_matrix(char *ref, char *query);
@@ -123,23 +139,3 @@ float extend_bulge_loop(int previous_loop_len);
 char complement(char base);
 int is_complement(char base1, char base2);
 Decision_Record best_record(Decision_Record records[], int nrecord);
-
-
-
-
-
-
-
-
-/*************************************************
- * Nearest Neighbour Thermodynamics Parameters *
- * **********************************************/
-
-#define ABSOLUTE_ZERO_OFFSET 273.15
-
-typedef struct {
-    char *neighbour;
-    float delH;
-    float delS;
-} Therm_Param;
-
