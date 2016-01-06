@@ -29,6 +29,12 @@
 #include <string.h>
 #include "swnn2.h"
 
+/****************************************************************************
+ * Routine for initialisation of the sw_matrix and processing the last row
+ * and last column. 
+ ***************************************************************************/
+
+
 
 SW_Entry **initiate_duplex_matrix(char *ref, char *query)
 {
@@ -90,10 +96,7 @@ SW_Entry _handle_first_entry(char first_ref, char first_query)
     {
         Therm_Param init_parameter = (first_ref == 'G' || first_ref == 'C') ? 
                                      GLOBAL_init_GC : GLOBAL_init_AT;
-        float init_delG = init_parameter.delH * 1000.0 \
-                          + (GLOBAL_Reaction_Temperature \
-                             + ABSOLUTE_ZERO_OFFSET) * init_parameter.delS;
-        first_entry.bind = {init_delG, STOP, MATCH, loop_len, loop_len}
+        first_entry.bind = {init_delG(first_ref), STOP, MATCH, loop_len, loop_len}
     }
     return first_entry;
 }
@@ -101,15 +104,17 @@ SW_Entry _handle_first_entry(char first_ref, char first_query)
 SW_Entry _handle_init_row_col(Neighbour nn_config)
 {
     SW_Entry result_entry;
-    float init_delG;
+    float delG;
     int has_complement = (is_complement(nn_config.top5, nn_config.bottom3) ||
                           is_complement(nn_config.top3, nn_config.bottom5)) ?
                          0 : 1;
     int loop_len = (has_complement) ? 0:1;
     if (has_complement)
     {
-        init_delG = get_delG_terminal(nn_config);
-        result_entry.bind = {init_delG, STOP, MATCH, loop_len, loop_len};
+        delG = get_delG_terminal(nn_config) + init_delG(nn_config(top3));
+        // the choice of top3 can be replace by bottom5 since
+        // the left dangling end always have that 2 matched up
+        result_entry.bind = {delG, STOP, MATCH, loop_len, loop_len};
     } else
     {
         result_entry.bind = {0.0, STOP, MATCH, loop_len, loop_len};
@@ -118,6 +123,23 @@ SW_Entry _handle_init_row_col(Neighbour nn_config)
     result_entry.bottom_bulge = {0.0, STOP, BOTTOM_BULGE, loop_len, loop_len};
     return result_entry;
 }
+
+SW_Entry **process_last_row_col(SW_Entry sw_matrix, char *ref, char *query)
+{
+    int nrow = strlen(ref);
+    int ncol = strlen(query);
+    register int i, j;
+
+
+
+
+
+
+
+
+/****************************************************************************
+ * score_bind, score_top_bulge and score_bottom_bulge
+ ***************************************************************************/
 
 
 
@@ -147,6 +169,10 @@ Decision_Record score_bind(SW_Entry **sw_matrix,
     // 2 cases,
     // - previous binding is a match: simply add on delG from match table
     // - previous binding is a mismatch: 2 subcases
+    // !!!!! THIS HAS BEEN CHANGED. Found out later that there is no backtracking 
+    // !!!!! necessary since loop calculation include delG for mismatches at the 2 ends.
+    // !!!!!!! BUT not sure if the mismatch data is internal or terminal (huge difference)
+    // !!!!!!! assume internal first (no backtracking).
     //     -> current binding is a match: another 2 subcases
     //         => previous mismatch is a single mismatch: delG from mismatch table
     //         => previous mismatch part of loop: loop penalty and close of the loop
@@ -185,22 +211,11 @@ Decision_Record score_bind(SW_Entry **sw_matrix,
                    case (MISMATCH): // mismatch and mismatch
                           {
                               continue_from_bind.previous_decision = MISMATCH;
-                              if (prev_decision_record.top_loop_len == 1 && prev_decision_record.bottom_loop_len == 1)
-                              {// backtrack delG addition and score loop
-                                  Neighbour nn_config = {ref[col -1], ref[col], query[row -1], query[row]};
-                                  continue_from_bind.top_loop_len = 2; // adding 1 to previous loop of 1
-                                  continue_from_bind.bottom_loop_len = 2; // doing the same to bottom, since if a mismatch
-                                  continue_from_bind.delG = prev_decision_record.delG \
-                                                            - get_delG_internal(nn_config) \
-                                                            + internal_loop_score(continue_from_bind.top_loop_len, 
-                                                                                    continue_from_bind.bottom_loop_len);
-                              } else if (prev_decision_record.top_loop_len > 1 || prev_decision_record.bottom_loop_len > 1)
-                              {// no backtracking required, already in loop
-                                  continue_from_bind.top_loop_len = prev_decision_record.top_loop_len +1;
-                                  continue_from_bind.bottom_loop_len = prev_decision_record.bottom_loop_len +1;
-                                  continue_from_bind.delG = prev_decision_record.delG \
-                                                            + internal_loop_score(continue_from_bind.top_loop_len,
-                                                                                    continue_from_bind.bottom_loop_len);
+                              continue_from_bind.top_loop_len = prev_decision_record.top_loop_len +1;
+                              continue_from_bind.bottom_loop_len = prev_decision_record.bottom_loop_len +1;
+                              continue_from_bind.delG = prev_decision_record.delG \
+                                                        + internal_loop_score(continue_from_bind.top_loop_len,
+                                                                              continue_from_bind.bottom_loop_len);
                               }
                           }
                           break;
@@ -285,6 +300,8 @@ Decision_Record score_top_bulge(SW_Entry **sw_matrix,
     //                                  query[row] query[row +1]
     //                              to be included
     // previous binding is a mismatch: this is an internal loop, but there's 2 cases
+    // !!!!! THIS HAS BEEN CHANGED. Found out later that there is no backtracking 
+    // !!!!! necessary since loop calculation include delG for mismatches at the 2 ends.
     //     -> previous mismatch is single: need to backtrack previous delG addition
     //                                     then extend to form internal loop
     //     -> previous mismatch part of loop: continue the internal loop
@@ -306,31 +323,12 @@ Decision_Record score_top_bulge(SW_Entry **sw_matrix,
                                   + get_delG_internal(nn_config);
     } else if (previous_decision_record.current_decision == MISMATCH)
     {
-        if (previous_decision_record.top_loop_len == 1 && previous_decision_record.bottom_loop_len == 1)
-        {// need to backtrack previous delG addition
-            continue_from_bind.top_loop_len = 2; // add one from previous single mismatch
-            continue_from_bind.bottom_loop_len = 1; // from previous single mismatch
-
-            /* neighbour:
-             *     MXB
-             *     Mx   where B is the current bulge, which is current col
-             *          while x is current row.
-             *     previous binding was treated as a mismatch, 
-             *     but now it's part of a loop, the mismatch contribution
-             *     needs to be backtracked. */
-            Neighbour nn_config = {ref[col -2], ref[col -1],
-                                  query[row -1], query[row]};
-            continue_from_bind.delG = previous_decision_record.delG \
-                                      - get_delG_internal(nn_config) \
-                                      + internal_loop_score(continue_from_bind.top_loop_len,
-                                                            continue_from_bind.bottom_loop_len);
-        } else if (previous_decision_record.top_loop_len > 1 || previous_decision_record.bottom_loop_len > 1)
-        {
-            continue_from_bind.top_loop_len = previous_decision_record.top_loop_len +1;
-            continue_from_bind.bottom_loop_len = previous_decision_record.bottom_loop_len;
-            continue_from_bind.delG = previous_decision_record.delG \
-                                      + internal_loop_score(continue_from_bind.top_loop_len,
-                                                            continue_from_bind.bottom_loop_len);
+        continue_from_bind.previous_decision = MISMATCH;
+        continue_from_bind.top_loop_len = previous_decision_record.top_loop_len +1;
+        continue_from_bind.bottom_loop_len = previous_decision_record.bottom_loop_len;
+        continue_from_bind.delG = previous_decision_record.delG \
+                                  + internal_loop_score(continue_from_bind.top_loop_len,
+                                                        continue_from_bind.bottom_loop_len);
         }
     }
     // now handle continue from previous top_bulge: 2 cases
@@ -343,14 +341,19 @@ Decision_Record score_top_bulge(SW_Entry **sw_matrix,
          *     Mbm
          *     m M  where b is previous bulge.
          *          top "m" is current col which needs to be changed to bulge.
-         *          bottom m is current row */
+         *          bottom m is current row 
+         * observe that if we are considering this scenario at the second ref base,
+         * it would result in an indexing error since 1 -2 = -1, which is outside
+         * of ref string. But that will never occur since for all of 
+         * first row and first column in sw_matrix, top_loop_len and bottom_loop_len
+         * are either both 1 or both 0, and never different. */
         Neighbour nn_config = {ref[col -2], ref[col],
                                query[row], query[row +1]};
         continue_from_top_bulge.top_loop_len = 2; // added 1 to prev len
         continue_from_top_bulge.delG = previous_decision_record.delG \
-                                          - get_delG_internal(nn_config) \
-                                          + internal_loop_score(continue_from_top_bulge.top_loop_len,
-                                                                continue_from_top_bulge.bottom_loop_len);
+                                       - get_delG_internal(nn_config) \
+                                       + internal_loop_score(continue_from_top_bulge.top_loop_len,
+                                                             continue_from_top_bulge.bottom_loop_len);
     } else if (previous_decision_record.top_loop_len > 1 || previous_decision_record.bottom_loop_len > 0)
     {
         continue_from_top_bulge.top_loop_len = previous_decision_record.top_loop_len +1;
@@ -416,30 +419,12 @@ Decision_Record score_bottom_bulge(SW_Entry **sw_matrix,
                                   + get_delG_internal(nn_config);
     } else if (previous_decision_record.current_decision == MISMATCH)
     {
-        if (previous_decision_record.top_loop_len == 1 && previous_decision_record.bottom_loop_len == 1)
-        {// need to backtrack previous delG addition
-            continue_from_bind.top_loop_len = 1; // the one from previous mismatch
-            continue_from_bind.bottom_loop_len = 2; // add one for current bulge
-
-            /* neighbour:
-             *     MX
-             *     MXB   where B is the current bulge 
-             *     previous binding was treated as a mismatch, 
-             *     but now it's part of a loop, the mismatch contribution
-             *     needs to be backtracked. */
-            Neighbour nn_config = {ref[col -1], ref[col],
-                                  query[row -2], query[row -1]};
-            continue_from_bind.delG = previous_decision_record.delG \
-                                      - get_delG_internal(nn_config) \
-                                      + internal_loop_score(continue_from_bind.top_loop_len,
-                                                            continue_from_bind.bottom_loop_len);
-        } else if (previous_decision_record.top_loop_len > 1 || previous_decision_record.bottom_loop_len > 1)
-        {
-            continue_from_bind.bottom_loop_len = previous_decision_record.bottom_loop_len +1;
-            continue_from_bind.top_loop_len = previous_decision_record.top_loop_len;
-            continue_from_bind.delG = previous_decision_record.delG \
-                                      + internal_loop_score(continue_from_bind.top_loop_len,
-                                                            continue_from_bind.bottom_loop_len);
+        continue_from_bind.previous_decision = MISMATCH;
+        continue_from_bind.bottom_loop_len = previous_decision_record.bottom_loop_len +1;
+        continue_from_bind.top_loop_len = previous_decision_record.top_loop_len;
+        continue_from_bind.delG = previous_decision_record.delG \
+                                  + internal_loop_score(continue_from_bind.top_loop_len,
+                                                        continue_from_bind.bottom_loop_len);
         }
     }
     // now handle continue from previous bottom_bulge: 2 cases
@@ -452,7 +437,13 @@ Decision_Record score_bottom_bulge(SW_Entry **sw_matrix,
          *     m M  the m at the top is current col
          *     Mbm  where b is previous bulge.
          *     "m" is current position (row) which needs to be changed to bulge. 
-         *     the addition of mM/Mm delG needs to be backtracked. */
+         *     the addition of mM/Mm delG needs to be backtracked.
+         *
+         * observe that if we are considering this scenario at the second query base,
+         * it would result in an indexing error since 1 -2 = -1, which is outside
+         * of string. But that will never occur since for all of 
+         * first row and first column in sw_matrix, top_loop_len and bottom_loop_len
+         * are either both 1 or both 0, and never different. */
         Neighbour nn_config = {ref[col], ref[col +1],
                                query[row -2], query[row]};
         continue_from_bottom_bulge.bottom_loop_len = 2; // added 1 to prev len
