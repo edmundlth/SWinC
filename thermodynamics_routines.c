@@ -1,15 +1,26 @@
 #include <math.h>
-#include "swnn2.h"
+#include "swnn.h"
 
 /********************** THERMODYNAMICS ROUTINES ****************************/
 float internal_loop_score(int top_loop_len, int bottom_loop_len)
 {
-    return 0.0;
+    extern const Loop_Entropy_Diff GLOBAL_internal_loop_data[];
+    extern const float GLOBAL_internal_loop_assymetry_penalty;
+    extern float GLOBAL_Reaction_Temperature;
+    return (GLOBAL_internal_loop_data[top_loop_len + bottom_loop_len].deldelS * 
+            (GLOBAL_Reaction_Temperature +  ABSOLUTE_ZERO_OFFSET));
+    //       + (fabs(top_loop_len - bottom_loop_len) * 
+    //        GLOBAL_internal_loop_assymetry_penalty);
+    // !!!!!! THESE 2 lines are assymetry penalty, but if we keep on adding it
+    // during "extension" the calculation will be wrong.
 }
 
 float bulge_score(int loop_len)
 {
-    return 0.0;
+    extern const Loop_Entropy_Diff GLOBAL_bulge_loop_data[];
+    extern float GLOBAL_Reaction_Temperature;
+    return (GLOBAL_bulge_loop_data[loop_len].deldelS * 
+            (GLOBAL_Reaction_Temperature +  ABSOLUTE_ZERO_OFFSET));
 }
 
 
@@ -112,15 +123,16 @@ float init_delG(char base)
     float delG;
     if (base == 'A' || base == 'T')
     {
-        return GLOBAL_init_AT.delH * 1000.0 - \
+        delG = GLOBAL_init_AT.delH * 1000.0 - \
                GLOBAL_init_AT.delS * \
                (GLOBAL_Reaction_Temperature + ABSOLUTE_ZERO_OFFSET);
     } else if (base == 'G' || base == 'C')
     {
-        return GLOBAL_init_GC.delH * 1000.0 - \
+        delG = GLOBAL_init_GC.delH * 1000.0 - \
                GLOBAL_init_GC.delS * \
                (GLOBAL_Reaction_Temperature + ABSOLUTE_ZERO_OFFSET);
     }
+    return delG;
 }
         
 
@@ -134,6 +146,8 @@ float GLOBAL_Salt_Concentration = 50.0; // mMol
 
 const Therm_Param GLOBAL_init_GC = {"init_G/C", 0, 0};
 const Therm_Param GLOBAL_init_AT = {"init_A/T", 2.3, 4.1};
+const float GLOBAL_internal_loop_assymmetry_penalty = 0.3; // kcal mol-1
+
 const Therm_Param GLOBAL_Initialisation[] = {
     {"init", 0, 0}, 
     {"init_A/T", 2.3, 4.1}, 
@@ -1030,4 +1044,132 @@ const Therm_Param GLOBAL_nn_data_terminal[] = {
     {"-", 0.0, 0.0},
     {"-", 0.0, 0.0},
     {"-", 0.0, 0.0},
+};
+
+const Loop_Entropy_Diff GLOBAL_internal_loop_data[] = {
+    {0, 0.00},
+    {1, 0.00},
+    {2, 0.00},
+    {3, 10.32},
+    {4, 1.29},
+    {5, 1.29},
+    {6, 1.29},
+    {7, 0.64},
+    {8, 0.64},
+    {9, 0.32},
+    {10, 0.00},
+    {11, 0.46},
+    {12, 0.51},
+    {13, 0.39},
+    {14, 0.26},
+    {15, 0.33},
+    {16, 0.31},
+    {17, 0.29},
+    {18, 0.35},
+    {19, 0.26},
+    {20, 0.06},
+    {21, 0.24},
+    {22, 0.23},
+    {23, 0.22},
+    {24, 0.21},
+    {25, 0.41},
+    {26, 0.19},
+    {27, 0.18},
+    {28, 0.18},
+    {29, 0.17},
+    {30, 0.25},
+    {31, 0.16},
+    {32, 0.15},
+    {33, 0.15},
+    {34, 0.14},
+    {35, 0.14},
+    {36, 0.14},
+    {37, 0.13},
+    {38, 0.13},
+    {39, 0.13},
+    {40, 0.12},
+    {41, 0.12},
+    {42, 0.12},
+    {43, 0.11},
+    {44, 0.11},
+    {45, 0.11},
+    {46, 0.11},
+    {47, 0.10},
+    {48, 0.10},
+    {49, 0.10},
+    {50, 0.10},
+    {51, 0.10},
+    {52, 0.09},
+    {53, 0.09},
+    {54, 0.09},
+    {55, 0.09},
+    {56, 0.09},
+    {57, 0.09},
+    {58, 0.08},
+    {59, 0.08},
+    {60, 0.08}
+};
+
+const Loop_Entropy_Diff GLOBAL_bulge_loop_data[] = {
+    {0, 0.00},
+    {1, 0.00},
+    {2, -3.55},
+    {3, 0.64},
+    {4, 0.32},
+    {5, 0.32},
+    {6, 0.64},
+    {7, 0.64},
+    {8, 0.64},
+    {9, 0.64},
+    {10, 0.64},
+    {11, 0.46},
+    {12, 0.18},
+    {13, 0.39},
+    {14, 0.58},
+    {15, 0.33},
+    {16, 0.31},
+    {17, 0.29},
+    {18, 0.35},
+    {19, 0.26},
+    {20, 0.06},
+    {21, 0.24},
+    {22, 0.23},
+    {23, 0.22},
+    {24, 0.21},
+    {25, 0.08},
+    {26, 0.19},
+    {27, 0.18},
+    {28, 0.18},
+    {29, 0.17},
+    {30, 0.25},
+    {31, 0.16},
+    {32, 0.15},
+    {33, 0.15},
+    {34, 0.14},
+    {35, 0.14},
+    {36, 0.14},
+    {37, 0.13},
+    {38, 0.13},
+    {39, 0.13},
+    {40, 0.12},
+    {41, 0.12},
+    {42, 0.12},
+    {43, 0.11},
+    {44, 0.11},
+    {45, 0.11},
+    {46, 0.11},
+    {47, 0.10},
+    {48, 0.10},
+    {49, 0.10},
+    {50, 0.10},
+    {51, 0.10},
+    {52, 0.09},
+    {53, 0.09},
+    {54, 0.09},
+    {55, 0.09},
+    {56, 0.09},
+    {57, 0.09},
+    {58, 0.08},
+    {59, 0.08},
+    {60, 0.08}
 };

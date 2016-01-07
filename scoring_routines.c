@@ -27,7 +27,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include "swnn2.h"
+#include "swnn.h"
 
 /****************************************************************************
  * Routine for initialisation of the sw_matrix and processing the last row
@@ -36,7 +36,7 @@
 
 
 
-SW_Entry **initiate_duplex_matrix(char *ref, char *query)
+SW_Entry **initialise_duplex_matrix(char *ref, char *query)
 {
     int nrow = strlen(query);
     int ncol = strlen(ref);
@@ -46,16 +46,17 @@ SW_Entry **initiate_duplex_matrix(char *ref, char *query)
     Neighbour nn_config;
     for (i = 0, j = 1; j < ncol; j++)
     {
-        nn_config = {ref[j -1], ref[j],
+        nn_config = (Neighbour) {ref[j -1], ref[j],
                      '.', query[i]};
         sw_matrix[i][j] = _handle_init_row_col(nn_config);
     }
     for (i = 1, j = 0; i < nrow; i++)
     {
-        nn_config = {'.', ref[j],
+        nn_config = (Neighbour) {'.', ref[j],
                      query[i -1], query[i]};
         sw_matrix[i][j] = _handle_init_row_col(nn_config);
     }
+    return sw_matrix;
 }
 
 
@@ -66,7 +67,7 @@ SW_Entry **_allocate_matrix(int nrow, int ncol)
     SW_Entry **sw_matrix = malloc(sizeof(SW_Entry *) * nrow);
     for (i = 0; i < ncol; i++)
     {
-        sw_matrix[i] = mallow(sizeof(SW_Entry) * ncol);
+        sw_matrix[i] = malloc(sizeof(SW_Entry) * ncol);
     }
     if (sw_matrix == NULL)
     {
@@ -85,18 +86,17 @@ SW_Entry _handle_first_entry(char first_ref, char first_query)
     // if the first pair is a mismatch, there is no "initiation energy"
     // and the loop len is 1.
     // otherwise, we add either "init_GC" or "init_AT".
+    extern const float GLOBAL_init_GC, GLOBAL_init_AT;
     SW_Entry first_entry;
     int loop_len = (is_complement(first_ref, first_query)) ? 0 : 1;
-    first_entry.top_bulge = {0.0, STOP, TOP_BULGE, loop_len, loop_len};
-    first_entry.bottom_bulge = {0.0, STOP, BOTTOM_BULGE, loop_len, loop_len};
+    first_entry.top_bulge = (Decision_Record) {0.0, STOP, TOP_BULGE, loop_len, loop_len};
+    first_entry.bottom_bulge = (Decision_Record) {0.0, STOP, BOTTOM_BULGE, loop_len, loop_len};
     if (loop_len == 1)
     {// if they are not complement
-        first_entry.bind = {0.0, STOP, MISMATCH, loop_len, loop_len};
+        first_entry.bind = (Decision_Record) {0.0, STOP, MISMATCH, loop_len, loop_len};
     } else
     {
-        Therm_Param init_parameter = (first_ref == 'G' || first_ref == 'C') ? 
-                                     GLOBAL_init_GC : GLOBAL_init_AT;
-        first_entry.bind = {init_delG(first_ref), STOP, MATCH, loop_len, loop_len}
+        first_entry.bind = (Decision_Record) {init_delG(first_ref), STOP, MATCH, loop_len, loop_len};
     }
     return first_entry;
 }
@@ -111,24 +111,249 @@ SW_Entry _handle_init_row_col(Neighbour nn_config)
     int loop_len = (has_complement) ? 0:1;
     if (has_complement)
     {
-        delG = get_delG_terminal(nn_config) + init_delG(nn_config(top3));
+        delG = get_delG_terminal(nn_config) + init_delG(nn_config.top3);
         // the choice of top3 can be replace by bottom5 since
         // the left dangling end always have that 2 matched up
-        result_entry.bind = {delG, STOP, MATCH, loop_len, loop_len};
+        result_entry.bind = (Decision_Record) {delG, STOP, MATCH, loop_len, loop_len};
     } else
     {
-        result_entry.bind = {0.0, STOP, MATCH, loop_len, loop_len};
+        result_entry.bind = (Decision_Record) {0.0, STOP, MATCH, loop_len, loop_len};
     }
-    result_entry.top_bulge = {0.0, STOP, TOP_BULGE, loop_len, loop_len};
-    result_entry.bottom_bulge = {0.0, STOP, BOTTOM_BULGE, loop_len, loop_len};
+    result_entry.top_bulge = (Decision_Record) {0.0, STOP, TOP_BULGE, loop_len, loop_len};
+    result_entry.bottom_bulge = (Decision_Record) {0.0, STOP, BOTTOM_BULGE, loop_len, loop_len};
     return result_entry;
 }
 
-SW_Entry **process_last_row_col(SW_Entry sw_matrix, char *ref, char *query)
+SW_Entry **process_last_row_col(SW_Entry **sw_matrix, char *ref, char *query)
 {
     int nrow = strlen(ref);
     int ncol = strlen(query);
-    register int i, j;
+    register int row, col;
+
+    for (col = ncol -1, row = 1; row < nrow -1; row++)
+    {
+        sw_matrix[row][col] = compute_last_entry(sw_matrix, 
+                                                 row, col,
+                                                 ref, query);
+    }
+    for (row = nrow -1, col = 1; col < ncol; col++)
+    {
+        sw_matrix[row][col] = compute_last_entry(sw_matrix,
+                                                 row, col,
+                                                 ref, query);
+    }
+    return sw_matrix;
+}
+
+SW_Entry compute_last_entry(SW_Entry **sw_matrix,
+                            int row, int col,
+                            char *ref, char *query)
+{
+    return (SW_Entry) {score_bind_terminal(sw_matrix, row, col, ref, query),
+                       score_top_bulge_terminal(sw_matrix, row, col, ref, query),
+                       score_bottom_bulge_terminal(sw_matrix, row, col, ref, query)};
+}
+
+Decision_Record score_top_bulge_terminal(SW_Entry **sw_matrix,
+                                         int row, int col,
+                                         char *ref, char *query)
+{
+    SW_Entry prev_entry = sw_matrix[row][col -1];
+    Decision_Record continue_from_bind = {0.0, MATCH, TOP_BULGE, 0, 0};
+    Decision_Record continue_from_top_bulge = {0.0, TOP_BULGE, TOP_BULGE, 0, 0};
+
+    Decision_Record previous_decision_record;
+    // handle continue from previous match or mismatch
+    previous_decision_record = prev_entry.bind;
+    continue_from_bind.top_loop_len = previous_decision_record.top_loop_len +1;
+    continue_from_bind.bottom_loop_len = previous_decision_record.bottom_loop_len;
+    continue_from_bind.delG = previous_decision_record.delG \
+                              + internal_loop_score(continue_from_bind.top_loop_len,
+                                                    continue_from_bind.bottom_loop_len);
+
+    // handle continue from previous top bulge
+    previous_decision_record = prev_entry.top_bulge;
+    continue_from_top_bulge.top_loop_len = previous_decision_record.top_loop_len +1;
+    continue_from_top_bulge.bottom_loop_len = previous_decision_record.bottom_loop_len;
+    continue_from_top_bulge.delG = previous_decision_record.delG \
+                                   + internal_loop_score(continue_from_top_bulge.top_loop_len, 
+                                                         continue_from_top_bulge.bottom_loop_len);
+
+    Decision_Record two_continuation_records[] = {continue_from_bind,
+                                                continue_from_top_bulge};
+    return best_record(two_continuation_records, 2);
+}
+
+Decision_Record score_bottom_bulge_terminal(SW_Entry **sw_matrix,
+                                         int row, int col,
+                                         char *ref, char *query)
+{
+    SW_Entry prev_entry = sw_matrix[row][col -1];
+    Decision_Record continue_from_bind = {0.0, MATCH, TOP_BULGE, 0, 0};
+    Decision_Record continue_from_bottom_bulge = {0.0, TOP_BULGE, TOP_BULGE, 0, 0};
+
+    Decision_Record previous_decision_record;
+    // handle continue from previous match or mismatch
+    previous_decision_record = prev_entry.bind;
+    continue_from_bind.top_loop_len = previous_decision_record.top_loop_len;
+    continue_from_bind.bottom_loop_len = previous_decision_record.bottom_loop_len +1;
+    continue_from_bind.delG = previous_decision_record.delG \
+                              + internal_loop_score(continue_from_bind.top_loop_len,
+                                                    continue_from_bind.bottom_loop_len);
+
+    // handle continue from previous bottom bulge
+    previous_decision_record = prev_entry.bottom_bulge;
+    continue_from_bottom_bulge.top_loop_len = previous_decision_record.top_loop_len;
+    continue_from_bottom_bulge.bottom_loop_len = previous_decision_record.bottom_loop_len +1;
+    continue_from_bottom_bulge.delG = previous_decision_record.delG \
+                                   + internal_loop_score(continue_from_bottom_bulge.top_loop_len, 
+                                                         continue_from_bottom_bulge.bottom_loop_len);
+
+    Decision_Record two_continuation_records[] = {continue_from_bind,
+                                                continue_from_bottom_bulge};
+    return best_record(two_continuation_records, 2);
+}
+
+
+Decision_Record score_bind_terminal(SW_Entry **sw_matrix,
+                                    int row, int col,
+                                    char *ref, char *query)
+{
+    SW_Entry prev_entry = sw_matrix[row -1][col -1];
+
+    Decision_Record previous_decision_record;
+
+    Decision_Record continue_from_bind;
+    Decision_Record continue_from_top_bulge;
+    Decision_Record continue_from_bottom_bulge;
+
+    float dangling_end_delG = _get_dangling_end_delG(ref, query, row, col);
+    int is_current_match = (is_complement(ref[col], query[row])) ? 1 : 0;
+
+    // handle continue from previous match or mismatch.
+    previous_decision_record = prev_entry.bind;
+    if (previous_decision_record.current_decision == MATCH)
+    {
+        Neighbour nn_config = {ref[col -1], ref[col],
+                               query[row -1], query[row]};
+        continue_from_bind.previous_decision = MATCH;
+        if (is_current_match)
+        {
+            continue_from_bind.current_decision = MATCH;
+            continue_from_bind.top_loop_len = 0;
+            continue_from_bind.bottom_loop_len = 0;
+            continue_from_bind.delG = previous_decision_record.delG + \
+                                      get_delG_internal(nn_config) + \
+                                      dangling_end_delG;
+        } else
+        {
+            continue_from_bind.current_decision = MISMATCH;
+            continue_from_bind.top_loop_len = previous_decision_record.top_loop_len +1;
+            continue_from_bind.bottom_loop_len = previous_decision_record.bottom_loop_len +1;
+            continue_from_bind.delG = previous_decision_record.delG + \
+                                      get_delG_terminal(nn_config) + \
+                                      dangling_end_delG;
+        }
+    } else
+    {
+        continue_from_bind.previous_decision = MISMATCH;
+        if (is_current_match)
+        {
+            Neighbour nn_config = {ref[col -1], ref[col],
+                                   query[row -1], query[row]};
+            continue_from_bind.current_decision = MATCH;
+            continue_from_bind.top_loop_len = 0;
+            continue_from_bind.bottom_loop_len = 0;
+            continue_from_bind.delG = previous_decision_record.delG \
+                                      + get_delG_internal(nn_config) \
+                                      + dangling_end_delG;
+            // !!! is this internal or terminal?? xxxx| 
+
+        } else 
+        {
+            continue_from_bind.current_decision = MISMATCH;
+            continue_from_bind.top_loop_len = previous_decision_record.top_loop_len +1;
+            continue_from_bind.bottom_loop_len = previous_decision_record.bottom_loop_len +1;
+            continue_from_bind.delG = previous_decision_record.delG \
+                                      + internal_loop_score(continue_from_bind.top_loop_len,
+                                                            continue_from_bind.bottom_loop_len);
+        }
+    }
+
+    // handle continue from previous top bulge
+    previous_decision_record = prev_entry.top_bulge;
+    continue_from_top_bulge.previous_decision = TOP_BULGE;
+    if (is_current_match)
+    {
+        continue_from_top_bulge.current_decision = MATCH;
+        continue_from_top_bulge.top_loop_len = 0;
+        continue_from_top_bulge.bottom_loop_len = 0;
+        continue_from_top_bulge.delG = previous_decision_record.delG \
+                                       + dangling_end_delG;
+    } else
+    {
+        continue_from_top_bulge.current_decision = MISMATCH;
+        continue_from_top_bulge.top_loop_len = previous_decision_record.top_loop_len +1;
+        continue_from_top_bulge.bottom_loop_len = previous_decision_record.bottom_loop_len +1;
+        continue_from_top_bulge.delG = previous_decision_record.delG \
+                                       + internal_loop_score(continue_from_top_bulge.top_loop_len,
+                                                             continue_from_top_bulge.bottom_loop_len);
+    }
+    // handle continue from previous bottom bulge
+    previous_decision_record = prev_entry.bottom_bulge;
+    continue_from_bottom_bulge.previous_decision = BOTTOM_BULGE;
+    if (is_current_match)
+    {
+        continue_from_bottom_bulge.current_decision = MATCH;
+        continue_from_bottom_bulge.top_loop_len = 0;
+        continue_from_bottom_bulge.bottom_loop_len = 0;
+        continue_from_bottom_bulge.delG = previous_decision_record.delG \
+                                          + dangling_end_delG;
+    } else
+    {
+        continue_from_bottom_bulge.current_decision = MISMATCH;
+        continue_from_bottom_bulge.top_loop_len = previous_decision_record.top_loop_len +1;
+        continue_from_bottom_bulge.bottom_loop_len = previous_decision_record.bottom_loop_len +1;
+        continue_from_bottom_bulge.delG = previous_decision_record.delG \
+                                          + internal_loop_score(continue_from_top_bulge.top_loop_len,
+                                                                continue_from_bottom_bulge.bottom_loop_len);
+    }
+
+    Decision_Record three_continuation_records[] = {continue_from_bind,
+                                                    continue_from_top_bulge,
+                                                    continue_from_bottom_bulge};
+    return best_record(three_continuation_records, 3);
+}
+
+
+float _get_dangling_end_delG(char *ref, char *query, int row, int col)
+{
+    int ref_len = strlen(ref);
+    int query_len = strlen(query);
+    int is_current_match = (is_complement(ref[col], query[row])) ? 1:0;
+    float dangling_end_delG;
+    if (is_current_match)
+    {
+        // a terminal matching pair admit a dangline end configuration
+        // if at least one of the string isn't exhausted.
+        Neighbour dangling_end_config;
+        if (row == query_len -1)
+        {
+            dangling_end_config = (Neighbour) {ref[col], ref[col +1],
+                                               query[row], '.'};
+        }else if (col == ref_len -1)
+        {
+            dangling_end_config = (Neighbour) {ref[col], '.',
+                                               query[row], query[row +1]};
+        }
+        dangling_end_delG = get_delG_terminal(dangling_end_config);
+    } else
+    {
+        dangling_end_delG = 0.0;
+    }
+    return dangling_end_delG;
+}
+
 
 
 
@@ -159,8 +384,8 @@ Decision_Record score_bind(SW_Entry **sw_matrix,
                            char *ref, char *query)
 {
     SW_Entry prev_entry = sw_matrix[row-1][col -1];
-    Decision_Record prev_decision_record;
-    char current_decision = (is_complement(query[row], ref[col])) ? 'M' : 'X';
+    Decision_Record previous_decision_record;
+    char current_decision = (is_complement(query[row], ref[col])) ? MATCH : MISMATCH;
     Decision_Record continue_from_bind = {0, MATCH, current_decision, 0, 0};
     Decision_Record continue_from_top_bulge = {0, TOP_BULGE, current_decision, 0, 0};
     Decision_Record continue_from_bottom_bulge = {0, BOTTOM_BULGE, current_decision, 0, 0};
@@ -179,14 +404,14 @@ Decision_Record score_bind(SW_Entry **sw_matrix,
     //     -> current binding is a mismatch: another 2 subcases
     //         => previous mismatch is single: backtrack the delG addition and add on loop penalty instead
     //         => previous mismatch part of loop: loop penalty
-    prev_decision_record = prev_entry.bind;
-    switch (prev_decision_record.current_decision)
+    previous_decision_record = prev_entry.bind;
+    switch (previous_decision_record.current_decision)
     {
         case (MATCH): // continue from previous match
              {// do further zipping, internal delG handle both match and mismatch
                  Neighbour nn_config = {ref[col -1], ref[col], query[row -1], query[row]};
-                 continue_from_bind.delG = prev_decision_record.delG + get_delG_internal(nn_config);
-                 continue_from_bind.top_loop_len = (current_decision == 'M') ? 0 : 1;
+                 continue_from_bind.delG = previous_decision_record.delG + get_delG_internal(nn_config);
+                 continue_from_bind.top_loop_len = (current_decision == MATCH) ? 0 : 1;
                  continue_from_bind.bottom_loop_len = continue_from_bind.top_loop_len;
              }
              break;
@@ -196,14 +421,14 @@ Decision_Record score_bind(SW_Entry **sw_matrix,
                {
                    case (MATCH):
                        { // mismatch then match
-                          if (prev_decision_record.top_loop_len == 1 && prev_decision_record.bottom_loop_len == 1)
+                          if (previous_decision_record.top_loop_len == 1 && previous_decision_record.bottom_loop_len == 1)
                           {// do further zipping
                               Neighbour nn_config = {ref[col -1], ref[col], query[row -1], query[row]};
-                              continue_from_bind.delG = prev_decision_record.delG + get_delG_internal(nn_config);
+                              continue_from_bind.delG = previous_decision_record.delG + get_delG_internal(nn_config);
                               continue_from_bind.previous_decision = MISMATCH;
-                          } else if (prev_decision_record.top_loop_len > 1 || prev_decision_record.bottom_loop_len > 1)
+                          } else if (previous_decision_record.top_loop_len > 1 || previous_decision_record.bottom_loop_len > 1)
                           {// do nothing since previous internal loop calculation already assume this is match
-                              continue_from_bind.delG = prev_decision_record.delG;
+                              continue_from_bind.delG = previous_decision_record.delG;
                               continue_from_bind.previous_decision = MISMATCH;
                           }
                        }
@@ -211,17 +436,14 @@ Decision_Record score_bind(SW_Entry **sw_matrix,
                    case (MISMATCH): // mismatch and mismatch
                           {
                               continue_from_bind.previous_decision = MISMATCH;
-                              continue_from_bind.top_loop_len = prev_decision_record.top_loop_len +1;
-                              continue_from_bind.bottom_loop_len = prev_decision_record.bottom_loop_len +1;
-                              continue_from_bind.delG = prev_decision_record.delG \
+                              continue_from_bind.top_loop_len = previous_decision_record.top_loop_len +1;
+                              continue_from_bind.bottom_loop_len = previous_decision_record.bottom_loop_len +1;
+                              continue_from_bind.delG = previous_decision_record.delG \
                                                         + internal_loop_score(continue_from_bind.top_loop_len,
                                                                               continue_from_bind.bottom_loop_len);
-                              }
                           }
+               
                           break;
-                   default:
-                   fprintf(stderr, "Neither MATCH nor MISMATCH at bind record");
-                   exit(EXIT_FAILURE);
                }
             }
     }
@@ -235,17 +457,17 @@ Decision_Record score_bind(SW_Entry **sw_matrix,
     // we might remain in a bulge or continue a previous internal loop,
     // but since both case assume current base is a match, we do nothing
     // except carry the record over. 
-    prev_decision_record = prev_entry.top_bulge;
+    previous_decision_record = prev_entry.top_bulge;
     switch (current_decision)
     {
         case (MATCH):
-             continue_from_top_bulge.delG = prev_decision_record.delG;
-             break;
+            continue_from_top_bulge.delG = previous_decision_record.delG;
+            break;
         case (MISMATCH):
              {
-                 continue_from_top_bulge.top_loop_len = prev_decision_record.top_loop_len +1;
-                 continue_from_top_bulge.bottom_loop_len = prev_decision_record.bottom_loop_len +1;
-                 continue_from_top_bulge.delG = prev_decision_record.delG \
+                 continue_from_top_bulge.top_loop_len = previous_decision_record.top_loop_len +1;
+                 continue_from_top_bulge.bottom_loop_len = previous_decision_record.bottom_loop_len +1;
+                 continue_from_top_bulge.delG = previous_decision_record.delG \
                                                 + internal_loop_score(continue_from_top_bulge.top_loop_len,
                                                                       continue_from_top_bulge.bottom_loop_len);
              }
@@ -253,17 +475,17 @@ Decision_Record score_bind(SW_Entry **sw_matrix,
     }
     // now handle continuing from previous bottom_bulge,
     // the resoning is the same as continuing from top_bulge. 
-    prev_decision_record = prev_entry.bottom_bulge;
+    previous_decision_record = prev_entry.bottom_bulge;
     switch (current_decision)
     {
         case (MATCH):
-             continue_from_bottom_bulge.delG = prev_decision_record.delG;
+             continue_from_bottom_bulge.delG = previous_decision_record.delG;
              break;
         case (MISMATCH):
              {
-                 continue_from_bottom_bulge.top_loop_len = prev_decision_record.top_loop_len +1;
-                 continue_from_bottom_bulge.bottom_loop_len = prev_decision_record.bottom_loop_len +1;
-                 continue_from_bottom_bulge.delG = prev_decision_record.delG \
+                 continue_from_bottom_bulge.top_loop_len = previous_decision_record.top_loop_len +1;
+                 continue_from_bottom_bulge.bottom_loop_len = previous_decision_record.bottom_loop_len +1;
+                 continue_from_bottom_bulge.delG = previous_decision_record.delG \
                                                 + internal_loop_score(continue_from_bottom_bulge.top_loop_len,
                                                                       continue_from_bottom_bulge.bottom_loop_len);
              }
@@ -274,7 +496,7 @@ Decision_Record score_bind(SW_Entry **sw_matrix,
     Decision_Record three_continuation_records[] = {continue_from_bind,
                                                     continue_from_top_bulge,
                                                     continue_from_bottom_bulge};
-    return best_record(three_continuation_records,3);
+    return best_record(three_continuation_records, 3);
 }
 
 /* score_top_bulge: 
@@ -329,7 +551,6 @@ Decision_Record score_top_bulge(SW_Entry **sw_matrix,
         continue_from_bind.delG = previous_decision_record.delG \
                                   + internal_loop_score(continue_from_bind.top_loop_len,
                                                         continue_from_bind.bottom_loop_len);
-        }
     }
     // now handle continue from previous top_bulge: 2 cases
     // previous bulge has size 1: need to backtrack the special size one intervening delG addition
@@ -425,7 +646,6 @@ Decision_Record score_bottom_bulge(SW_Entry **sw_matrix,
         continue_from_bind.delG = previous_decision_record.delG \
                                   + internal_loop_score(continue_from_bind.top_loop_len,
                                                         continue_from_bind.bottom_loop_len);
-        }
     }
     // now handle continue from previous bottom_bulge: 2 cases
     // previous bulge has size 1: need to backtrack the special size one intervening delG addition
@@ -464,7 +684,6 @@ Decision_Record score_bottom_bulge(SW_Entry **sw_matrix,
     Decision_Record two_continuation_records[] = {continue_from_bind,
                                                 continue_from_bottom_bulge};
     return best_record(two_continuation_records, 2);
-
 }
 
 /* score_stop:

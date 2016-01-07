@@ -7,7 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "swnn2.h"
+#include "swnn.h"
 
 static SW_Entry **initialise_matrix(int nrow, int ncol);
 Decision_Record best_record(Decision_Record records[], int nrecord);

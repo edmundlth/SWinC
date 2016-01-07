@@ -100,7 +100,15 @@ typedef struct {
     float delS;
 } Therm_Param;
 
-
+/* This structure record the difference of entropy
+ * going from loop_size -1 to loop_size for both
+ * internal loop and bulge loop.
+ * For any loop, enthalpy values are always assumed
+ * to be 0, hence the change in enthalpy is also 0 */
+typedef struct {
+    int loop_size;
+    float deldelS;
+} Loop_Entropy_Diff;
 
 /************************** ALIGNMENT ROUTINES ******************************/
 SW_Entry **complete_duplex_matrix(char *ref, char *query);
@@ -133,6 +141,25 @@ float get_delG_internal(Neighbour nn_config);
 float get_delG_terminal(Neighbour nn_config);
 float init_delG(char base);
 
+SW_Entry **_allocate_matrix(int nrow, int ncol);
+SW_Entry **initialise_duple_matrix(char *ref, char *qeury);
+SW_Entry _handle_first_entry(char first_ref, char first_query);
+SW_Entry _handle_init_row_col(Neighbour nn_config);
+SW_Entry **process_last_row_col(SW_Entry **sw_matrix, 
+                                char *ref, char *query);
+SW_Entry compute_last_entry(SW_Entry **sw_matrix,
+                            int row, int col,
+                            char *ref, char *query);
+Decision_Record score_bind_terminal(SW_Entry **sw_matrix,
+                                    int row, int col,
+                                    char *ref, char *query);
+Decision_Record score_top_bulge_terminal(SW_Entry **sw_matrix,
+                                         int row, int col,
+                                         char *ref, char *query);
+Decision_Record score_bottom_bulge_terminal(SW_Entry **sw_matrix,
+                                            int row, int col,
+                                            char *ref, char *query);
+float _get_dangling_end_delG(char *ref, char *query, int row, int col);
 /************************** UTILITIES ROUTINES ******************************/
 char complement(char base);
 int is_complement(char base1, char base2);
