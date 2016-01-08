@@ -18,9 +18,8 @@ float internal_loop_score(int top_loop_len, int bottom_loop_len)
 float bulge_score(int loop_len)
 {
     extern const Loop_Entropy_Diff GLOBAL_bulge_loop_data[];
-    extern float GLOBAL_Reaction_Temperature;
-    return (GLOBAL_bulge_loop_data[loop_len].deldelS * 
-            (GLOBAL_Reaction_Temperature +  ABSOLUTE_ZERO_OFFSET));
+    float delH = 0.0; // loop enthalpy is always assumed to be 0.
+    return compute_delG(delH, GLOBAL_bulge_loop_data[loop_len].deldelS);
 }
 
 
@@ -98,43 +97,41 @@ int _get_index_terminal(Neighbour nn_config)
 float get_delG_internal(Neighbour nn_config)
 {
     extern const Therm_Param GLOBAL_nn_data_internal[];
-    extern float GLOBAL_Reaction_Temperature;
     int index = _get_index_internal(nn_config);
     Therm_Param record = GLOBAL_nn_data_internal[index];
-    return record.delH * 1000.0 \
-           - (GLOBAL_Reaction_Temperature + ABSOLUTE_ZERO_OFFSET) * record.delS;
+    return compute_delG(record.delH, record.delS);
 }
 
 float get_delG_terminal(Neighbour nn_config)
 {
     extern const Therm_Param GLOBAL_nn_data_terminal[];
-    extern float GLOBAL_Reaction_Temperature;
     int index = _get_index_terminal(nn_config);
     Therm_Param record = GLOBAL_nn_data_terminal[index];
-    return record.delH * 1000.0 \
-           - (GLOBAL_Reaction_Temperature + ABSOLUTE_ZERO_OFFSET) * record.delS;
+    return compute_delG(record.delH, record.delS);
 }
 
 float init_delG(char base)
 {
     extern const Therm_Param GLOBAL_init_GC;
     extern const Therm_Param GLOBAL_init_AT;
-    extern float GLOBAL_Reaction_Temperature;
-    float delG;
+    float delG = 0.0;
     if (base == 'A' || base == 'T')
     {
-        delG = GLOBAL_init_AT.delH * 1000.0 - \
-               GLOBAL_init_AT.delS * \
-               (GLOBAL_Reaction_Temperature + ABSOLUTE_ZERO_OFFSET);
+        delG = compute_delG(GLOBAL_init_AT.delH, GLOBAL_init_AT.delS);
     } else if (base == 'G' || base == 'C')
     {
-        delG = GLOBAL_init_GC.delH * 1000.0 - \
-               GLOBAL_init_GC.delS * \
-               (GLOBAL_Reaction_Temperature + ABSOLUTE_ZERO_OFFSET);
+        delG = compute_delG(GLOBAL_init_GC.delH, GLOBAL_init_GC.delS);
     }
     return delG;
 }
-        
+
+
+float compute_delG(float delH, float delS)
+{
+    extern float GLOBAL_Reaction_Temperature;
+    return delH * 1000.0 - \
+           (GLOBAL_Reaction_Temperature + ABSOLUTE_ZERO_OFFSET) * delS;
+}
 
 /*************************************************
  * Nearest Neighbour Thermodynamics Parameters *

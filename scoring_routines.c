@@ -132,20 +132,20 @@ SW_Entry **process_last_row_col(SW_Entry **sw_matrix, char *ref, char *query)
 
     for (col = ncol -1, row = 1; row < nrow -1; row++)
     {
-        sw_matrix[row][col] = compute_last_entry(sw_matrix, 
-                                                 row, col,
-                                                 ref, query);
+        sw_matrix[row][col] = compute_terminal_entry(sw_matrix, 
+                                                     row, col,
+                                                     ref, query);
     }
     for (row = nrow -1, col = 1; col < ncol; col++)
     {
-        sw_matrix[row][col] = compute_last_entry(sw_matrix,
-                                                 row, col,
-                                                 ref, query);
+        sw_matrix[row][col] = compute_terminal_entry(sw_matrix,
+                                                     row, col,
+                                                     ref, query);
     }
     return sw_matrix;
 }
 
-SW_Entry compute_last_entry(SW_Entry **sw_matrix,
+SW_Entry compute_terminal_entry(SW_Entry **sw_matrix,
                             int row, int col,
                             char *ref, char *query)
 {
@@ -710,7 +710,6 @@ Decision_Record score_stop(SW_Entry **sw_matrix,
                            char *ref, char *query)
 {
     SW_Entry prev_entry = sw_matrix[row -1][col -1];
-    Decision_Record previous_decision_record;
     Decision_Record continue_from_bind = {0, MATCH, STOP, 0, 0};
     Decision_Record continue_from_top_bulge = {0, TOP_BULGE, STOP, 0, 0};
     Decision_Record continue_from_bottom_bulge = {0, BOTTOM_BULGE, STOP, 0, 0};

@@ -113,15 +113,15 @@ typedef struct {
 /************************** ALIGNMENT ROUTINES ******************************/
 SW_Entry **complete_duplex_matrix(char *ref, char *query);
 SW_Entry **initialise_duplex_matrix(char *ref, char *query);
-SW_Entry compute_entry(SW_Entry **sw_matrix, 
-                       int row, int col, 
-                       char *ref, char *query);
+SW_Entry compute_internal_entry(SW_Entry **sw_matrix, 
+                                int row, int col, 
+                                char *ref, char *query);
 Coord find_best_entry_coord(SW_Entry **sw_matrix, int nrow, int ncol);
 
 /************************** SCORING ROUTINES ******************************/
 Decision_Record score_bind(SW_Entry **sw_matrix,
-                            int row, int col,
-                            char *ref, char *query);
+                           int row, int col,
+                           char *ref, char *query);
 Decision_Record score_top_bulge(SW_Entry **sw_matrix,
                                 int row, int col,
                                 char *ref, char *query);
@@ -139,6 +139,7 @@ int _get_index_internal(Neighbour nn_config);
 int _get_index_terminal(Neighbour nn_config);
 float get_delG_internal(Neighbour nn_config);
 float get_delG_terminal(Neighbour nn_config);
+float compute_delG(float delH, float delS);
 float init_delG(char base);
 
 SW_Entry **_allocate_matrix(int nrow, int ncol);
@@ -147,7 +148,7 @@ SW_Entry _handle_first_entry(char first_ref, char first_query);
 SW_Entry _handle_init_row_col(Neighbour nn_config);
 SW_Entry **process_last_row_col(SW_Entry **sw_matrix, 
                                 char *ref, char *query);
-SW_Entry compute_last_entry(SW_Entry **sw_matrix,
+SW_Entry compute_terminal_entry(SW_Entry **sw_matrix,
                             int row, int col,
                             char *ref, char *query);
 Decision_Record score_bind_terminal(SW_Entry **sw_matrix,

@@ -9,25 +9,68 @@
 #include <string.h>
 #include "swnn.h"
 
-static SW_Entry **initialise_matrix(int nrow, int ncol);
-Decision_Record best_record(Decision_Record records[], int nrecord);
+
+void _test_get_delG();
+void _test();
 
 int main()
 {
-    Neighbour nn_config = {'A', 'G', 'T','C'};
-    extern const Therm_Param GLOBAL_nn_data_internal[];
-    extern float GLOBAL_Reaction_Temperature;
-    Therm_Param from_record = GLOBAL_nn_data_internal[_get_index_internal(nn_config)];
-    printf("%s %f %f\n", from_record.neighbour, from_record.delH, from_record.delS);
-    printf("delG = %f\n", from_record.delH * 1000.0 - (GLOBAL_Reaction_Temperature + ABSOLUTE_ZERO_OFFSET) * from_record.delS);
-    printf("delG_function = %f\n", get_delG_internal(nn_config));
+    _test();
+    //_test_get_delG();
     return 0;
 }
 
+void _test()
+{
+    char *ref   = "ATGGCCATGG";
+    char *query = "TACCGGTACC";
+    register int i;
+    extern const Therm_Param GLOBAL_init_AT;
+    float delG = compute_delG(GLOBAL_init_AT.delH, GLOBAL_init_AT.delS);
+    Neighbour nn_config;
+    for (i = 0; i < strlen(ref); i++)
+    {
+        nn_config = (Neighbour) {ref[i-1], ref[i],
+                                 query[i-1], query[i]};
+        delG += get_delG_internal(nn_config);
+    }
+    printf("delG zipping = %f\n", delG);
 
-/************************** ALIGNMENT ROUTINES ******************************/
+    //SW_Entry **sw_matrix = complete_duplex_matrix(ref, query);
+    //SW_Entry last_entry = sw_matrix[strlen(query) -1][strlen(ref) -1];
+    //printf("delG in last entry = %f\n", last_entry.bind.delG);
+}
 
-/* duplex_matrix:
+
+void _test_get_delG()
+{
+    Neighbour nn_config_match = {'A', 'G', 'T','C'};
+    extern const Therm_Param GLOBAL_nn_data_internal[];
+    extern const Therm_Param GLOBAL_nn_data_terminal[];
+    extern float GLOBAL_Reaction_Temperature;
+    Therm_Param from_record = GLOBAL_nn_data_internal[_get_index_internal(nn_config_match)];
+    printf("%s %f %f\n", from_record.neighbour, from_record.delH, from_record.delS);
+    printf("delG = %f\n", from_record.delH * 1000.0 \
+                          - (GLOBAL_Reaction_Temperature + ABSOLUTE_ZERO_OFFSET)\
+                          * from_record.delS);
+    printf("delG_function = %f\n", get_delG_internal(nn_config_match));
+
+    Neighbour nn_config_terminal = {'.', 'A', 
+                                    'T', 'T'};
+    from_record = GLOBAL_nn_data_terminal[_get_index_terminal(nn_config_terminal)];
+    printf("%s %f %f\n", from_record.neighbour, from_record.delH, from_record.delS);
+    printf("delG = %f\n", from_record.delH * 1000.0 \
+                          - (GLOBAL_Reaction_Temperature + ABSOLUTE_ZERO_OFFSET)\
+                          * from_record.delS);
+    printf("delG_function = %f\n", get_delG_internal(nn_config_terminal));
+}
+
+
+
+
+/************************** HYBRIDISE ROUTINES ******************************/
+
+/* complete_duplex_matrix:
  * Given a reference sequence (sense sequence)
  * and a query sequence (antisense sequence)
  * return a DP matrix recording all the decisions and scores. 
@@ -47,20 +90,21 @@ SW_Entry **complete_duplex_matrix(char *ref, char *query)
     register int row, col;
     // start from 1, since the 0th row and col 
     // had been filled during initiation
-    for (row = 1; row < nrow; row++)
+    for (row = 1; row < nrow -1; row++)
     {
-        for (col = 1; col < ncol; col++)
+        for (col = 1; col < ncol -1; col++)
         {
-            sw_matrix[row][col] = compute_entry(sw_matrix,
-                                                row, col,
-                                                ref, query);
+            sw_matrix[row][col] = compute_internal_entry(sw_matrix,
+                                                         row, col,
+                                                         ref, query);
         }
     }
+    sw_matrix = process_last_row_col(sw_matrix, ref, query);
     return sw_matrix;
 }
 
 
-SW_Entry compute_entry(SW_Entry **sw_matrix,
+SW_Entry compute_internal_entry(SW_Entry **sw_matrix,
                        int row, int col,
                        char *ref, char *query)
 {
