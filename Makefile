@@ -9,10 +9,10 @@ EXE_DEBUG = swnn_debug
 $(EXE): $(OBJECTS)
 		$(CC) $(CFLAGS) -O2 -o $(EXE) $(OBJECTS)
 
-$(EXE_DEBUG): $(DEP)
+$(EXE_DEBUG): $(SRC)
 		$(CC) $(CFLAGS) -g -o $(EXE_DEBUG) $(SRC)
 
 $(OBJECTS):$(DEP)
 
 clean:
-		/bin/rm -fr $(EXE) $(EXE_DEBUG) $(OBJECTS) *.dSYM
+		/bin/rm -fr $(EXE) $(EXE_DEBUG) $(OBJECTS) 

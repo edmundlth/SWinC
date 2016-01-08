@@ -107,7 +107,7 @@ SW_Entry _handle_init_row_col(Neighbour nn_config)
     float delG;
     int has_complement = (is_complement(nn_config.top5, nn_config.bottom3) ||
                           is_complement(nn_config.top3, nn_config.bottom5)) ?
-                         0 : 1;
+                         1 : 0;
     int loop_len = (has_complement) ? 0:1;
     if (has_complement)
     {
@@ -126,8 +126,8 @@ SW_Entry _handle_init_row_col(Neighbour nn_config)
 
 SW_Entry **process_last_row_col(SW_Entry **sw_matrix, char *ref, char *query)
 {
-    int nrow = strlen(ref);
-    int ncol = strlen(query);
+    int nrow = strlen(query);
+    int ncol = strlen(ref);
     register int row, col;
 
     for (col = ncol -1, row = 1; row < nrow -1; row++)

@@ -116,7 +116,7 @@ SW_Entry **initialise_duplex_matrix(char *ref, char *query);
 SW_Entry compute_internal_entry(SW_Entry **sw_matrix, 
                                 int row, int col, 
                                 char *ref, char *query);
-Coord find_best_entry_coord(SW_Entry **sw_matrix, int nrow, int ncol);
+Coord find_best_decision_coord(SW_Entry **sw_matrix, int nrow, int ncol);
 
 /************************** SCORING ROUTINES ******************************/
 Decision_Record score_bind(SW_Entry **sw_matrix,
@@ -165,3 +165,5 @@ float _get_dangling_end_delG(char *ref, char *query, int row, int col);
 char complement(char base);
 int is_complement(char base1, char base2);
 Decision_Record best_record(Decision_Record records[], int nrecord);
+Decision_Record get_decision_from_entry(SW_Entry entry, char decision);
+void print_duplex(SW_Entry **sw_matrix, Coord coord, char *ref, char *query);
