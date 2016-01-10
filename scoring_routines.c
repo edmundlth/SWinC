@@ -42,19 +42,19 @@ SW_Entry **initialise_duplex_matrix(char *ref, char *query)
     int ncol = strlen(ref);
     SW_Entry **sw_matrix = _allocate_matrix(nrow, ncol);
     sw_matrix[0][0] = _handle_first_entry(ref[0], query[0]);
-    register int i, j;
+    register int row, col;
     Neighbour nn_config;
-    for (i = 0, j = 1; j < ncol; j++)
+    for (row = 0, col = 1; col < ncol; col++)
     {
-        nn_config = (Neighbour) {ref[j -1], ref[j],
-                     '.', query[i]};
-        sw_matrix[i][j] = _handle_init_row_col(nn_config);
+        nn_config = (Neighbour) {ref[col -1], ref[col],
+                     '.', query[row]};
+        sw_matrix[row][col] = _handle_init_row_col(nn_config);
     }
-    for (i = 1, j = 0; i < nrow; i++)
+    for (row = 1, col = 0; row < nrow; row++)
     {
-        nn_config = (Neighbour) {'.', ref[j],
-                     query[i -1], query[i]};
-        sw_matrix[i][j] = _handle_init_row_col(nn_config);
+        nn_config = (Neighbour) {'.', ref[col],
+                     query[row -1], query[row]};
+        sw_matrix[row][col] = _handle_init_row_col(nn_config);
     }
     return sw_matrix;
 }
@@ -107,7 +107,7 @@ SW_Entry _handle_init_row_col(Neighbour nn_config)
     float delG;
     int has_complement = (is_complement(nn_config.top5, nn_config.bottom3) ||
                           is_complement(nn_config.top3, nn_config.bottom5)) ?
-                         1 : 0;
+                         TRUE : FALSE;
     int loop_len = (has_complement) ? 0:1;
     if (has_complement)
     {
@@ -228,7 +228,7 @@ Decision_Record score_bind_terminal(SW_Entry **sw_matrix,
     Decision_Record continue_from_bottom_bulge;
 
     float dangling_end_delG = _get_dangling_end_delG(ref, query, row, col);
-    int is_current_match = (is_complement(ref[col], query[row])) ? 1 : 0;
+    int is_current_match = (is_complement(ref[col], query[row])) ? TRUE : FALSE;
 
     // handle continue from previous match or mismatch.
     previous_decision_record = prev_entry.bind;
@@ -330,7 +330,7 @@ float _get_dangling_end_delG(char *ref, char *query, int row, int col)
 {
     int ref_len = strlen(ref);
     int query_len = strlen(query);
-    int is_current_match = (is_complement(ref[col], query[row])) ? 1:0;
+    int is_current_match = (is_complement(ref[col], query[row])) ? TRUE : FALSE;
     float dangling_end_delG;
     if (is_current_match)
     {
@@ -704,7 +704,7 @@ Decision_Record score_bottom_bulge(SW_Entry **sw_matrix,
  * !!! the situation doesn't count as terminal or dangling end, then
  * !!! this function is entirely useless. The only relevant stop option
  * !!! will be at the last row and last column.
- */
+ *
 Decision_Record score_stop(SW_Entry **sw_matrix, 
                            int row, int col,
                            char *ref, char *query)
@@ -751,4 +751,4 @@ Decision_Record score_stop(SW_Entry **sw_matrix,
 }
 
 
-
+*/

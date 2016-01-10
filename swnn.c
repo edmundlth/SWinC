@@ -13,21 +13,17 @@
 void _test_get_delG();
 void _test();
 
-int main()
+int main(int argc, char **argv)
 {
-    _test();
-    //_test_get_delG();
-    return 0;
+    char *ref = argv[1];
+    char *query = argv[2];
+    _test(ref, query);
+    return EXIT_SUCCESS;
 }
 
-void _test()
+void _test(char *ref, char *query)
 {
-    char *ref   = "AATGGCCGTGGGTAGC";
-    char *query = "TACCGGCACAAATCGA";
-    extern const Therm_Param GLOBAL_init_AT;
-
     SW_Entry **sw_matrix = complete_duplex_matrix(ref, query);
-    SW_Entry last_entry = sw_matrix[strlen(query) -1][strlen(ref) -1];
     Coord best_coord = find_best_decision_coord(sw_matrix, strlen(query), strlen(ref));
     Decision_Record best_decision;
     SW_Entry best_entry = sw_matrix[best_coord.row][best_coord.col];
@@ -36,34 +32,8 @@ void _test()
 
     printf("delG in best decision = %f\n decision = %c at row=%i, col=%i\n", 
            best_decision.delG, best_decision.current_decision, best_coord.row, best_coord.col);
-    printf("delG in last entry = %f\n", last_entry.bind.delG);
-
 
     print_duplex(sw_matrix, best_coord, ref, query);
-}
-
-
-void _test_get_delG()
-{
-    Neighbour nn_config_match = {'A', 'G', 'T','C'};
-    extern const Therm_Param GLOBAL_nn_data_internal[];
-    extern const Therm_Param GLOBAL_nn_data_terminal[];
-    extern float GLOBAL_Reaction_Temperature;
-    Therm_Param from_record = GLOBAL_nn_data_internal[_get_index_internal(nn_config_match)];
-    printf("%s %f %f\n", from_record.neighbour, from_record.delH, from_record.delS);
-    printf("delG = %f\n", from_record.delH * 1000.0 \
-                          - (GLOBAL_Reaction_Temperature + ABSOLUTE_ZERO_OFFSET)\
-                          * from_record.delS);
-    printf("delG_function = %f\n", get_delG_internal(nn_config_match));
-
-    Neighbour nn_config_terminal = {'.', 'A', 
-                                    'T', 'T'};
-    from_record = GLOBAL_nn_data_terminal[_get_index_terminal(nn_config_terminal)];
-    printf("%s %f %f\n", from_record.neighbour, from_record.delH, from_record.delS);
-    printf("delG = %f\n", from_record.delH * 1000.0 \
-                          - (GLOBAL_Reaction_Temperature + ABSOLUTE_ZERO_OFFSET)\
-                          * from_record.delS);
-    printf("delG_function = %f\n", get_delG_internal(nn_config_terminal));
 }
 
 
@@ -121,9 +91,9 @@ SW_Entry compute_internal_entry(SW_Entry **sw_matrix,
     entry.bottom_bulge = score_bottom_bulge(sw_matrix,
                                             row, col,
                                             ref, query);
-    entry.stop = score_stop(sw_matrix,
-                            row, col,
-                            ref, query);
+    // entry.stop = score_stop(sw_matrix,
+    //                        row, col,
+    //                        ref, query);
     return entry;
 }
 
@@ -187,7 +157,7 @@ Coord find_best_entry_coord(SW_Entry **sw_matrix, int nrow, int ncol)
     register int row, col;
     float lowest_delG = 0.0;
     float new_delG;
-    Coord best_coord = { 0, 0, STOP};
+    Coord best_coord = {0, 0, MATCH};
     SW_Entry current_entry;
     Decision_Record record;
     for (row = 0; row < nrow; row++)
@@ -195,11 +165,10 @@ Coord find_best_entry_coord(SW_Entry **sw_matrix, int nrow, int ncol)
         for (col = 0; col < ncol; col++)
         {
             current_entry = sw_matrix[row][col];
-            Decision_Record four_options[] = {current_entry.bind,
+            Decision_Record three_options[] = {current_entry.bind,
                                                current_entry.top_bulge,
-                                               current_entry.bottom_bulge,
-                                               current_entry.stop};
-            record = best_record(four_options, 4);
+                                               current_entry.bottom_bulge};
+            record = best_record(three_options, 3);
             new_delG = record.delG;
             if (new_delG < lowest_delG)
             {
@@ -272,11 +241,6 @@ Decision_Record best_record(Decision_Record records[], int nrecord)
     }
     return best_record;
 }
-
-#define BOND '|'
-#define XBOND 'x'
-#define BULGE_GAP '-'
-#define EMPTY_SPACE '.'
 
 void print_duplex(SW_Entry **sw_matrix, Coord coord, char *ref, char *query)
 {
@@ -383,52 +347,3 @@ Decision_Record get_decision_from_entry(SW_Entry entry, char decision)
 }
 
 
-/************* UNUSED ***************************************************
-SW_Entry backtraced_entry(SW_Entry **sw_matrix, 
-                          int row, int col, 
-                          char current_decision,
-                          char previous_decision)
-{
-    SW_Entry previous_entry;
-    switch (current_decision)
-    {
-        case (MATCH): case (MISMATCH):
-            previous_entry = sw_matrix[row -1][col -1];
-            break;
-        case (TOP_BULGE):
-            previous_entry = sw_matrix[row][col -1];
-            break;
-        case (BOTTOM_BULGE):
-            previous_entry = sw_matrix[row -1][col];
-            break;
-        default:
-            {
-                fprintf(stderr,
-                        "swnn backtraced_entry: "
-                        "illegal decision character");
-                exit(EXIT_FAILURE);
-            }
-            break;
-    }
-    return get_decision_from_entry(previous_entry, previous_decision);
-}
-
-
-char *initialise_representation_string(int ref_len, int query_len)
-{
-    // initialise (almost) empty representation string.
-    // 3 lines: ref, match / mismatch symbols, query
-    // initiate so that newline character is at appropriate position.
-    int num_repr_line = 3;
-    int repr_len = (int) fmax(ref_len, query_len) * num_repr_line;
-    // +num_repr_line for <new_line> +1 for termination "\0"
-    char *duplex_representation = malloc(sizeof(char *) * \
-                                         repr_len + num_repr_line +1);
-    int i;
-    for (i = 0; i < num_repr_line; i++)
-    {
-        duplex_representation[repr_len * (num_repr_line -i) + (num_repr_line -i)] = '\n';
-    }
-    return duplex_representation;
-}
-*/

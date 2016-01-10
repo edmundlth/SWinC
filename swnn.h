@@ -12,6 +12,12 @@
 
 #define ABSOLUTE_ZERO_OFFSET 273.15
 
+/* These are base 4 or base 5 digits used in
+ * computing the index of the nn_config 
+ * depending on if the data is in the
+ * "internal" table (only base 4 is needed)
+ * or "terminal" table (base 5 needed due to the 
+ * extra alphabet '.') */
 #define INTERNAL_A 0
 #define INTERNAL_C 1
 #define INTERNAL_G 2
@@ -25,6 +31,15 @@
 
 #define NUM_SYS_BASE_INTERNAL 4
 #define NUM_SYS_BASE_TERMINAL 5
+
+/* The symbols used when printing out a duplex
+ * configuration */
+#define BOND '|'
+#define XBOND 'x'
+#define BULGE_GAP '-'
+#define EMPTY_SPACE '.'
+
+
 /* type that record the score
  * for each possible decision 
  * Recording current state is redundant since
@@ -50,7 +65,6 @@ typedef struct
     Decision_Record bind;
     Decision_Record top_bulge;
     Decision_Record bottom_bulge;
-    Decision_Record stop;
 } SW_Entry;
 
 /* The structure that represent the coordinate
@@ -128,10 +142,10 @@ Decision_Record score_top_bulge(SW_Entry **sw_matrix,
 Decision_Record score_bottom_bulge(SW_Entry **sw_matrix,
                                    int row, int col,
                                    char *ref, char *query);
-Decision_Record score_stop(SW_Entry **sw_matrix,
+/*Decision_Record score_stop(SW_Entry **sw_matrix,
                            int row, int col,
                            char *ref, char *query);
-
+*/
 /********************** THERMODYNAMICS ROUTINES ****************************/
 float internal_loop_score(int top_loop_len, int bottom_loop_len);
 float bulge_score(int loop_len);
