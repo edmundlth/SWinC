@@ -89,14 +89,14 @@ SW_Entry _handle_first_entry(char first_ref, char first_query)
     extern const float GLOBAL_init_GC, GLOBAL_init_AT;
     SW_Entry first_entry;
     int loop_len = (is_complement(first_ref, first_query)) ? 0 : 1;
-    first_entry.top_bulge = (Decision_Record) {0.0, STOP, TOP_BULGE, loop_len, loop_len};
-    first_entry.bottom_bulge = (Decision_Record) {0.0, STOP, BOTTOM_BULGE, loop_len, loop_len};
+    first_entry.top_bulge = (Decision_Record) {0.0, MATCH, TOP_BULGE, loop_len, loop_len};
+    first_entry.bottom_bulge = (Decision_Record) {0.0, MATCH, BOTTOM_BULGE, loop_len, loop_len};
     if (loop_len == 1)
     {// if they are not complement
-        first_entry.bind = (Decision_Record) {0.0, STOP, MISMATCH, loop_len, loop_len};
+        first_entry.bind = (Decision_Record) {0.0, MATCH, MISMATCH, loop_len, loop_len};
     } else
     {
-        first_entry.bind = (Decision_Record) {init_delG(first_ref), STOP, MATCH, loop_len, loop_len};
+        first_entry.bind = (Decision_Record) {init_delG(first_ref), MATCH, MATCH, loop_len, loop_len};
     }
     return first_entry;
 }
@@ -114,13 +114,13 @@ SW_Entry _handle_init_row_col(Neighbour nn_config)
         delG = get_delG_terminal(nn_config) + init_delG(nn_config.top3);
         // the choice of top3 can be replace by bottom5 since
         // the left dangling end always have that 2 matched up
-        result_entry.bind = (Decision_Record) {delG, STOP, MATCH, loop_len, loop_len};
+        result_entry.bind = (Decision_Record) {delG, MATCH, MATCH, loop_len, loop_len};
     } else
     {
-        result_entry.bind = (Decision_Record) {0.0, STOP, MATCH, loop_len, loop_len};
+        result_entry.bind = (Decision_Record) {0.0, MATCH, MATCH, loop_len, loop_len};
     }
-    result_entry.top_bulge = (Decision_Record) {0.0, STOP, TOP_BULGE, loop_len, loop_len};
-    result_entry.bottom_bulge = (Decision_Record) {0.0, STOP, BOTTOM_BULGE, loop_len, loop_len};
+    result_entry.top_bulge = (Decision_Record) {0.0, MATCH, TOP_BULGE, loop_len, loop_len};
+    result_entry.bottom_bulge = (Decision_Record) {0.0, MATCH, BOTTOM_BULGE, loop_len, loop_len};
     return result_entry;
 }
 

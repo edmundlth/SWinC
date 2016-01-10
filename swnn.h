@@ -8,7 +8,7 @@
 #define MISMATCH 'X'
 #define TOP_BULGE 'T'
 #define BOTTOM_BULGE 'B'
-#define STOP 'S'
+// #define STOP 'S'
 
 #define ABSOLUTE_ZERO_OFFSET 273.15
 
