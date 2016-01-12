@@ -52,11 +52,13 @@ int extract_pool(char *filename, char *buffer[])
 
 void _test(char **pool, int pool_size, char *outfilename)
 {
-    FILE *outfile = fopen(outfilename, "r");
+    FILE *outfile = fopen(outfilename, "w");
+    fprintf(outfile, "ref\tquery\tdelG\n");
     float best_delG, new_delG;
     char *ref;
     char query[MAX_SEQ_LEN];
     char *best_partner;
+    SW_Entry **sw_matrix;
     Coord best_coord;
     int ref_len, query_len;
     int i, j;
@@ -73,8 +75,8 @@ void _test(char **pool, int pool_size, char *outfilename)
             {
                 reverse(pool[j], query);
                 query_len = strlen(query);
-                SW_Entry **sw_matrix = complete_duplex_matrix(ref, query);
-                best_coord = find_best_decision_coord(sw_matrix, ref_len, query_len);
+                sw_matrix = complete_duplex_matrix(ref, query);
+                best_coord = find_best_decision_coord(sw_matrix, query_len, ref_len);
                 new_delG = get_decision_from_entry(
                               sw_matrix[best_coord.row][best_coord.col],
                               best_coord.current_decision).delG;
@@ -85,7 +87,7 @@ void _test(char **pool, int pool_size, char *outfilename)
                 }
             }
         }
-        fprintf(outfile, "%s\t%s\t%f", ref, best_partner, best_delG);
+        fprintf(outfile, "%s\t%s\t%f\n", ref, best_partner, best_delG);
     }
     fclose(outfile);
 }
