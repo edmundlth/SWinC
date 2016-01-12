@@ -9,35 +9,150 @@
 #include <string.h>
 #include "swnn.h"
 
+#define MAX_SEQ_LEN 60
+#define MAX_POOL_SIZE 3000
 
-void _test_get_delG();
-void _test();
-
+void _test(char **pool, int pool_size, char *outfilename);
+void _test_pool(char **pool, int pool_size);
+void _test_pool_complement(char **pool, int pool_size);
+int extract_pool(char *filename, char *buffer[]);
+char *reverse(char *string, char buffer[]);
 int main(int argc, char **argv)
 {
-    char *ref = argv[1];
-    char *query = argv[2];
-    _test(ref, query);
+    char **pool = malloc(sizeof(char *) * MAX_POOL_SIZE);
+    int i;
+    for (i = 0; i < MAX_POOL_SIZE; i++)
+    {
+        pool[i] = malloc(sizeof(char) * (MAX_SEQ_LEN +1));
+    }
+    int num_seq = extract_pool(argv[1], pool);
+    _test(pool, num_seq, argv[2]);
     return EXIT_SUCCESS;
 }
 
-void _test(char *ref, char *query)
+int extract_pool(char *filename, char *buffer[])
 {
-    SW_Entry **sw_matrix = complete_duplex_matrix(ref, query);
-    Coord best_coord = find_best_decision_coord(sw_matrix, strlen(query), strlen(ref));
-    Decision_Record best_decision;
-    SW_Entry best_entry = sw_matrix[best_coord.row][best_coord.col];
-    Decision_Record options[] = {best_entry.bind, best_entry.top_bulge, best_entry.bottom_bulge};
-    best_decision = best_record(options , 3);
-
-    printf("delG in best decision = %f\n decision = %c at row=%i, col=%i\n", 
-           best_decision.delG, best_decision.current_decision, best_coord.row, best_coord.col);
-
-    print_duplex(sw_matrix, best_coord, ref, query);
+    FILE *inputfile = fopen(filename, "r");
+    int i;
+    for (i = 0; i < MAX_POOL_SIZE; i++)
+    {
+        buffer[i] = fgets(buffer[i], (MAX_SEQ_LEN +1), inputfile);
+        if (buffer[i] != NULL)
+        {
+            buffer[i][strlen(buffer[i]) -2] = '\0'; // remove newline
+        }
+        else
+        {
+            break;
+        }
+    }
+    return i;
 }
 
 
+void _test(char **pool, int pool_size, char *outfilename)
+{
+    FILE *outfile = fopen(outfilename, "r");
+    float best_delG, new_delG;
+    char *ref;
+    char query[MAX_SEQ_LEN];
+    char *best_partner;
+    Coord best_coord;
+    int ref_len, query_len;
+    int i, j;
 
+    for (i = 0; i < pool_size; i++)
+    {
+        best_delG = 0.0;
+        ref = pool[i];
+        ref_len = strlen(ref);
+        best_partner = "-";
+        for (j = 0; j < pool_size; j++)
+        {
+            if (i != j)
+            {
+                reverse(pool[j], query);
+                query_len = strlen(query);
+                SW_Entry **sw_matrix = complete_duplex_matrix(ref, query);
+                best_coord = find_best_decision_coord(sw_matrix, ref_len, query_len);
+                new_delG = get_decision_from_entry(
+                              sw_matrix[best_coord.row][best_coord.col],
+                              best_coord.current_decision).delG;
+                if (new_delG < best_delG)
+                {
+                    best_delG = new_delG;
+                    best_partner = query;
+                }
+            }
+        }
+        fprintf(outfile, "%s\t%s\t%f", ref, best_partner, best_delG);
+    }
+    fclose(outfile);
+}
+
+char *reverse(char *string, char *buffer)
+{
+    int i;
+    int length = strlen(string);
+    for (i = length; i >= 1; i--)
+    {
+        buffer[i -1] = string[length -i];
+    }
+    buffer[length] = '\0';
+    return buffer;
+}
+
+char *complement_seq(char *string, char buffer[])
+{
+    int length = strlen(string);
+    int i;
+    buffer[length] = '\0';
+    for (i = 0; i < length; i++)
+    {
+        buffer[i] = complement(string[i]);
+    }
+    return buffer;
+}
+
+void _test_pool(char **pool, int pool_size)
+{
+    char ref[61];
+    char query[61];
+    SW_Entry **sw_matrix;
+    Coord best_coord;
+    int i, j;
+    for (i = 0; i < pool_size; i++)
+    {
+        for (j = i; j < pool_size; j++)
+        {
+            strcpy(ref, pool[i]);
+            reverse(pool[j], query);
+            printf("(i, j) = (%i, %i)\n", i, j);
+            printf("ref  = %s\nquery= %s\n", ref, query);
+            sw_matrix = complete_duplex_matrix(ref, query);
+            best_coord = find_best_decision_coord(sw_matrix, strlen(query), strlen(ref));
+            print_duplex(sw_matrix, best_coord, ref, query);
+        }
+    }
+}
+
+void _test_pool_complement(char **pool, int pool_size)
+{
+    char *ref;
+    char query[61];
+    SW_Entry **sw_matrix;
+    Coord best_coord;
+    int i;
+    for (i = 0; i < pool_size; i++)
+    {
+        ref = pool[i];
+        complement_seq(pool[i], query);
+        printf("i= %i\nref  = %s\nquery= %s\n", i, ref, query);
+        sw_matrix = complete_duplex_matrix(ref, query);
+        best_coord = find_best_decision_coord(sw_matrix, strlen(query), strlen(ref));
+        print_duplex(sw_matrix, best_coord, ref, query);
+    }
+}
 
 /****************************************************************************
  * DP ROUTINES 
@@ -104,7 +219,7 @@ SW_Entry compute_internal_entry(SW_Entry **sw_matrix,
 Coord find_best_decision_coord(SW_Entry **sw_matrix, int nrow, int ncol)
 {
     register int row, col;
-    Coord best_coord;
+    Coord best_coord = {0, 0, MATCH};
     SW_Entry this_entry;
     Decision_Record this_record;
     float lowest_delG = 0.0;
@@ -242,81 +357,86 @@ Decision_Record best_record(Decision_Record records[], int nrecord)
     return best_record;
 }
 
+
 void print_duplex(SW_Entry **sw_matrix, Coord coord, char *ref, char *query)
 {
+    int start_row = coord.row;
+    int start_col = coord.col;
     int ref_len = strlen(ref);
     int query_len = strlen(query);
-    int repr_len = ref_len + query_len; //fmax(ref_len, query_len);
-    char ref_string[repr_len +1];
-    char bindings_string[repr_len +1];
-    char query_string[repr_len +1];
-    ref_string[repr_len] = bindings_string[repr_len] = query_string[repr_len] = '\0';
+    int repr_len = ref_len + query_len;
+    char *ref_string = calloc(repr_len +1, sizeof(char));
+    char *bindings_string = calloc(repr_len +1, sizeof(char));
+    char *query_string = calloc(repr_len +1, sizeof(char));
+    int j;
+    for (j = 0; j < repr_len; j++)
+    {
+        ref_string[j] = bindings_string[j] = query_string[j] = ' ';
+    }
 
-    Decision_Record current_decision_record;
+
+    printf("delG(duplex) = %f\n", get_decision_from_entry(sw_matrix[start_row][start_col],
+                                                        coord.current_decision).delG);
     // back tracing
-    int row = coord.row;
-    int col = coord.col;
+    int row = start_row;
+    int col = start_col;
+    int i;
     char decision = coord.current_decision;
-    current_decision_record = get_decision_from_entry(sw_matrix[row][col],
-                                                      decision);
-    register int i;
+    Decision_Record current_decision_record;
+    repr_len = ref_len + query_len;
     for (i = repr_len -1; i >= 0; i--)
     {
-        if (i <= row)
+        if (row >= 0 && col >= 0)
         {
-            if (i <= col)
+            current_decision_record = \
+                    get_decision_from_entry(sw_matrix[row][col],
+                                            decision);
+            decision = current_decision_record.current_decision;
+            if (decision == MATCH || 
+                decision == MISMATCH)
             {
-                decision = current_decision_record.current_decision;
-                if (decision == MATCH || 
-                    decision == MISMATCH)
-                {
-                    ref_string[i] = ref[col];
-                    bindings_string[i] = (decision == MATCH) ? BOND : XBOND;
-                    query_string[i] = query[row];
-                    row -= 1;
-                    col -= 1;
-                } else if (decision == TOP_BULGE)
-                {
-                    ref_string[i] = ref[col];
-                    bindings_string[i] = EMPTY_SPACE;
-                    query_string[i] = BULGE_GAP;
-                    col -= 1;
-                } else if (decision == BOTTOM_BULGE)
-                {
-                    ref_string[i] = BULGE_GAP;
-                    bindings_string[i] = EMPTY_SPACE;
-                    query_string[i] = query[row];
-                    row -= 1;
-                }
-                if (row > 0 && col > 0)
-                {
-                    current_decision_record = \
-                        get_decision_from_entry(sw_matrix[row][col],
-                                                current_decision_record.previous_decision);
-                }
-            } else if (i > col)
+                ref_string[i] = ref[col];
+                bindings_string[i] = (decision == MATCH) ? BOND : XBOND;
+                query_string[i] = query[row];
+                row -= 1;
+                col -= 1;
+            } else if (decision == TOP_BULGE)
             {
-                ref_string[i] = EMPTY_SPACE;
+                ref_string[i] = ref[col];
                 bindings_string[i] = EMPTY_SPACE;
-                query_string[i] = query[i];
+                query_string[i] = BULGE_GAP;
+                col -= 1;
+            } else if (decision == BOTTOM_BULGE)
+            {
+                ref_string[i] = BULGE_GAP;
+                bindings_string[i] = EMPTY_SPACE;
+                query_string[i] = query[row];
+                row -= 1;
             }
-        } else if (i > row)
+            decision = current_decision_record.previous_decision;
+        } else if (row >= 0 && col < 0)
         {
+            ref_string[i] = EMPTY_SPACE;
             bindings_string[i] = EMPTY_SPACE;
-            if (i <= col)
-            {
-                ref_string[i] = ref[i];
-                query_string[i] = EMPTY_SPACE;
-            } else if (i > col)
-            {
-                ref_string[i] = EMPTY_SPACE;
-                query_string[i] = EMPTY_SPACE;
-            }
+            query_string[i] = query[row];
+            row--;
+        } else if (row < 0 && col >= 0)
+        {
+            ref_string[i] = ref[col];
+            bindings_string[i] = EMPTY_SPACE;
+            query_string[i] = EMPTY_SPACE;
+            col--;
+        } else
+        {
+            ref_string[i] = bindings_string[i] = query_string[i] = EMPTY_SPACE;
         }
+//        printf("i=%i\nref  =%s\nbind =%s\nquery=%s\n\n", i, ref_string, bindings_string, query_string);
     }
-    printf("%s\n%s\n%s\n", ref_string, bindings_string, query_string);
+    printf("5'-%s-3'\n   %s   \n3'-%s-5'\n\n", ref_string, bindings_string, query_string);
+    free(ref_string);
+    free(bindings_string);
+    free(query_string);
 }
-
 
 
 
@@ -325,7 +445,10 @@ Decision_Record get_decision_from_entry(SW_Entry entry, char decision)
     Decision_Record current_decision;
     switch (decision)
     {
-        case (MATCH): case (MISMATCH):
+        case (MATCH): 
+            current_decision = entry.bind;
+            break;
+        case (MISMATCH):
             current_decision = entry.bind;
             break;
         case (TOP_BULGE):

@@ -65,7 +65,7 @@ SW_Entry **_allocate_matrix(int nrow, int ncol)
 {
     register int i;
     SW_Entry **sw_matrix = malloc(sizeof(SW_Entry *) * nrow);
-    for (i = 0; i < ncol; i++)
+    for (i = 0; i < nrow; i++)
     {
         sw_matrix[i] = malloc(sizeof(SW_Entry) * ncol);
     }
