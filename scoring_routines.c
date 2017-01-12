@@ -117,7 +117,7 @@ SW_Entry _handle_init_row_col(Neighbour nn_config)
         result_entry.bind = (Decision_Record) {delG, MATCH, MATCH, loop_len, loop_len};
     } else
     {
-        result_entry.bind = (Decision_Record) {0.0, MATCH, MATCH, loop_len, loop_len};
+        result_entry.bind = (Decision_Record) {0.0, MATCH, MISMATCH, loop_len, loop_len};
     }
     result_entry.top_bulge = (Decision_Record) {0.0, MATCH, TOP_BULGE, loop_len, loop_len};
     result_entry.bottom_bulge = (Decision_Record) {0.0, MATCH, BOTTOM_BULGE, loop_len, loop_len};

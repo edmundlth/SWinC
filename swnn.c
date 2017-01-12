@@ -19,6 +19,8 @@ int extract_pool(char *filename, char *buffer[]);
 char *reverse(char *string, char buffer[]);
 int main(int argc, char **argv)
 {
+//    extern float GLOBAL_Reaction_Temperature;
+    float GLOBAL_Reaction_Temperature = 60.0;
     char **pool = malloc(sizeof(char *) * MAX_POOL_SIZE);
     int i;
     for (i = 0; i < MAX_POOL_SIZE; i++)
@@ -56,8 +58,8 @@ void _test(char **pool, int pool_size, char *outfilename)
     fprintf(outfile, "ref\tquery\tdelG\n");
     float best_delG, new_delG;
     char *ref;
-    char query[MAX_SEQ_LEN];
-    char *best_partner;
+    char *query = malloc(sizeof(char) * (MAX_SEQ_LEN +1));
+    char best_partner[MAX_SEQ_LEN];
     SW_Entry **sw_matrix;
     Coord best_coord;
     int ref_len, query_len;
@@ -68,23 +70,30 @@ void _test(char **pool, int pool_size, char *outfilename)
         best_delG = 0.0;
         ref = pool[i];
         ref_len = strlen(ref);
-        best_partner = "-";
+        strcpy(best_partner, "-");
         for (j = 0; j < pool_size; j++)
         {
-            if (i != j)
+            reverse(pool[j], query);
+            query_len = strlen(query); //15;
+            query[query_len] = '\0';
+            sw_matrix = complete_duplex_matrix(ref, query);
+            best_coord = find_best_decision_coord(sw_matrix, query_len, ref_len);
+            new_delG = get_decision_from_entry(
+                          sw_matrix[best_coord.row][best_coord.col],
+                          best_coord.current_decision).delG;
+            if (new_delG < best_delG)
             {
-                reverse(pool[j], query);
-                query_len = strlen(query);
-                sw_matrix = complete_duplex_matrix(ref, query);
-                best_coord = find_best_decision_coord(sw_matrix, query_len, ref_len);
-                new_delG = get_decision_from_entry(
-                              sw_matrix[best_coord.row][best_coord.col],
-                              best_coord.current_decision).delG;
-                if (new_delG < best_delG)
+                best_delG = new_delG;
+                strcpy(best_partner, query);
+                if (best_delG < -10000.0)
                 {
-                    best_delG = new_delG;
-                    best_partner = query;
+                    print_duplex(sw_matrix, best_coord, ref, query);
                 }
+            }
+            int k;
+            for (k = 0; k < query_len; k++)
+            {
+                free(sw_matrix[k]);
             }
         }
         fprintf(outfile, "%s\t%s\t%f\n", ref, best_partner, best_delG);
@@ -96,9 +105,9 @@ char *reverse(char *string, char *buffer)
 {
     int i;
     int length = strlen(string);
-    for (i = length; i >= 1; i--)
+    for (i = 0; i < length; i++)
     {
-        buffer[i -1] = string[length -i];
+        buffer[i] = string[length -i -1];
     }
     buffer[length] = '\0';
     return buffer;
@@ -377,6 +386,7 @@ void print_duplex(SW_Entry **sw_matrix, Coord coord, char *ref, char *query)
     }
 
 
+    printf("ref  = %s\nquery= %s\n", ref, query);
     printf("delG(duplex) = %f\n", get_decision_from_entry(sw_matrix[start_row][start_col],
                                                         coord.current_decision).delG);
     // back tracing
@@ -393,7 +403,6 @@ void print_duplex(SW_Entry **sw_matrix, Coord coord, char *ref, char *query)
             current_decision_record = \
                     get_decision_from_entry(sw_matrix[row][col],
                                             decision);
-            decision = current_decision_record.current_decision;
             if (decision == MATCH || 
                 decision == MISMATCH)
             {
