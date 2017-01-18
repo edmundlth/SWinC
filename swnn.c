@@ -81,14 +81,15 @@ void _test(char **pool, int pool_size, char *outfilename)
             new_delG = get_decision_from_entry(
                           sw_matrix[best_coord.row][best_coord.col],
                           best_coord.current_decision).delG;
+            print_duplex(sw_matrix, best_coord, ref, query);
             if (new_delG < best_delG)
             {
                 best_delG = new_delG;
                 strcpy(best_partner, query);
-                if (best_delG < -10000.0)
-                {
-                    print_duplex(sw_matrix, best_coord, ref, query);
-                }
+//                if (best_delG < -10000.0)
+//                {
+//                    print_duplex(sw_matrix, best_coord, ref, query);
+//                }
             }
             int k;
             for (k = 0; k < query_len; k++)
