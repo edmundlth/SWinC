@@ -1,4 +1,5 @@
 #include <math.h>
+#include <string.h>
 #include "swnn.h"
 
 /********************** THERMODYNAMICS ROUTINES ****************************/
@@ -27,7 +28,7 @@ float bulge_score(int loop_len)
 int _digit_internal(char base)
 {
     int digit;
-    switch (base)
+    switch (toupper(base))
     {
         case 'A':
              digit = INTERNAL_A;
@@ -50,7 +51,7 @@ int _digit_internal(char base)
 int _digit_terminal(char base)
 {
     int digit;
-    switch (base)
+    switch (toupper(base))
     {
         case '.':
              digit = TERMINAL_DOT;
@@ -115,6 +116,7 @@ float init_delG(char base)
     extern const Therm_Param GLOBAL_init_GC;
     extern const Therm_Param GLOBAL_init_AT;
     float delG = 0.0;
+    base = toupper(base);
     if (base == 'A' || base == 'T')
     {
         delG = compute_delG(GLOBAL_init_AT.delH, GLOBAL_init_AT.delS);
