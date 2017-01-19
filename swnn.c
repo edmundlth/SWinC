@@ -41,7 +41,7 @@ int extract_pool(char *filename, char *buffer[])
         buffer[i] = fgets(buffer[i], (MAX_SEQ_LEN +1), inputfile);
         if (buffer[i] != NULL)
         {
-            buffer[i][strlen(buffer[i]) -2] = '\0'; // remove newline
+            buffer[i][strlen(buffer[i]) -1] = '\0'; // remove newline
         }
         else
         {
